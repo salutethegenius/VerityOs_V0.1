@@ -375,24 +375,65 @@ describe("Phase 7 unified execution", () => {
   });
 
   it("rejects invalid and cross-run context chunks", async () => {
-    const { org, collectionId } = await seedKnowledge("Context Org");
+    const { org, admin, collectionId } = await seedKnowledge("Context Org");
+    const otherCollection = await app.inject({
+      method: "POST",
+      url: "/v1/knowledge/collections",
+      headers: sessionHeaders(admin.cookie),
+      payload: { name: "Other", classification: "internal" },
+    });
+    const otherId = otherCollection.json().collection_id as string;
+    const uploaded = await app.inject({
+      method: "POST",
+      url: `/v1/knowledge/collections/${otherId}/sources`,
+      headers: sessionHeaders(admin.cookie, {
+        "content-type": "multipart/form-data; boundary=----veritytest",
+      }),
+      payload: markdownPart(
+        "spain.md",
+        "The capital of Spain is Madrid. Verity Knowledge records that Madrid is the capital of Spain for isolated retrieval tests.",
+        "Spain facts"
+      ),
+    });
+    await app.inject({
+      method: "POST",
+      url: `/v1/knowledge/versions/${uploaded.json().version_id}/approve`,
+      headers: sessionHeaders(admin.cookie),
+    });
+    await app.inject({
+      method: "POST",
+      url: `/v1/knowledge/versions/${uploaded.json().version_id}/index`,
+      headers: sessionHeaders(admin.cookie),
+    });
     const first = await openExecution(org);
     const second = await openExecution(org);
-    const retrieve = async (executionId: string) =>
-      app.inject({
-        method: "POST",
-        url: `/internal/v1/executions/${executionId}/knowledge/retrieve`,
-        headers: await authHeader(),
-        payload: {
-          query: "What is the capital of France?",
-          collection_ids: [collectionId],
-          mode: "strict",
-          classification_ceiling: "internal",
-        },
-      });
-    const a = await retrieve(first.execution_id);
-    const b = await retrieve(second.execution_id);
+    const a = await app.inject({
+      method: "POST",
+      url: `/internal/v1/executions/${first.execution_id}/knowledge/retrieve`,
+      headers: await authHeader(),
+      payload: {
+        query: "What is the capital of France?",
+        collection_ids: [collectionId],
+        mode: "strict",
+        classification_ceiling: "internal",
+      },
+    });
+    const b = await app.inject({
+      method: "POST",
+      url: `/internal/v1/executions/${second.execution_id}/knowledge/retrieve`,
+      headers: await authHeader(),
+      payload: {
+        query: "What is the capital of Spain?",
+        collection_ids: [otherId],
+        mode: "strict",
+        classification_ceiling: "internal",
+      },
+    });
+    expect(b.json().hits.length).toBeGreaterThan(0);
     const otherChunk = b.json().hits[0].chunk_id as string;
+    expect(a.json().hits.some((hit: { chunk_id: string }) => hit.chunk_id === otherChunk)).toBe(
+      false
+    );
     const invalid = await app.inject({
       method: "POST",
       url: `/internal/v1/executions/${first.execution_id}/model/execute`,

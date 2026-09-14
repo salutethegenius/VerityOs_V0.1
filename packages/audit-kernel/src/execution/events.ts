@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { Pool, PoolClient } from "pg";
+import pg, { type Pool, type PoolClient } from "pg";
 import {
   EXECUTION_EVENT_TYPES,
   type ExecutionEventStatus,
@@ -38,8 +38,33 @@ export interface AppendExecutionEventInput {
 
 const EVENT_TYPE_SET = new Set<string>(EXECUTION_EVENT_TYPES);
 
+function isPool(db: Pool | PoolClient): db is Pool {
+  return db instanceof pg.Pool;
+}
+
 export async function appendExecutionEvent(
   db: Pool | PoolClient,
+  input: AppendExecutionEventInput
+): Promise<ExecutionEventRow> {
+  if (isPool(db)) {
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      const row = await appendExecutionEventInTransaction(client, input);
+      await client.query("COMMIT");
+      return row;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  return appendExecutionEventInTransaction(db, input);
+}
+
+async function appendExecutionEventInTransaction(
+  client: PoolClient,
   input: AppendExecutionEventInput
 ): Promise<ExecutionEventRow> {
   if (!EVENT_TYPE_SET.has(input.eventType)) {
@@ -48,25 +73,32 @@ export async function appendExecutionEvent(
   const occurredAtCanonical = input.occurredAtCanonical ?? canonicalTimestampNow();
   const id = randomUUID();
   const parentEventIds = [...(input.parentEventIds ?? [])].sort();
-  const result = await db.query<ExecutionEventRow>(
-    `WITH locked AS (
-       SELECT id FROM audit.executions
-       WHERE id = $1 AND organization_id = $2
-       FOR UPDATE
-     )
-     INSERT INTO audit.execution_events (
+  const locked = await client.query<{ id: string }>(
+    `SELECT id FROM audit.executions
+     WHERE id = $1 AND organization_id = $2
+     FOR UPDATE`,
+    [input.executionId, input.organizationId]
+  );
+  if (!locked.rows[0]) {
+    const existing = await getExecution(client, input.organizationId, input.executionId);
+    if (!existing) {
+      throw new Error("execution not found");
+    }
+    throw new Error("failed to lock execution for event append");
+  }
+  const result = await client.query<ExecutionEventRow>(
+    `INSERT INTO audit.execution_events (
        id, organization_id, execution_id, event_sequence, event_type, status,
        parent_event_ids, input_hash, output_hash, metadata,
        occurred_at, occurred_at_canonical, created_at
      )
      SELECT
-       $3, $2, locked.id,
+       $3, $2, $1,
        COALESCE((
-         SELECT MAX(event_sequence) FROM audit.execution_events WHERE execution_id = locked.id
+         SELECT MAX(event_sequence) FROM audit.execution_events WHERE execution_id = $1
        ), 0) + 1,
        $4, $5, $6::uuid[], $7, $8, $9::jsonb,
        $10::timestamptz, $10, $10::timestamptz
-     FROM locked
      RETURNING *`,
     [
       input.executionId,
@@ -83,10 +115,6 @@ export async function appendExecutionEvent(
   );
   const row = result.rows[0];
   if (!row) {
-    const existing = await getExecution(db, input.organizationId, input.executionId);
-    if (!existing) {
-      throw new Error("execution not found");
-    }
     throw new Error("failed to append execution event");
   }
   return normalizeEvent(row);
