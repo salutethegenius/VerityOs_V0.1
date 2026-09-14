@@ -23,6 +23,33 @@ export interface OpenExecutionInput {
   retentionMode?: string | null;
 }
 
+const TRANSITIONS: Record<ExecutionStatus, ExecutionStatus[]> = {
+  created: ["running", "blocked", "failed", "cancelled"],
+  running: ["waiting_approval", "completed", "blocked", "failed", "cancelled"],
+  waiting_approval: ["running", "completed", "blocked", "failed", "cancelled"],
+  completed: [],
+  failed: [],
+  blocked: [],
+  cancelled: [],
+};
+
+export class ExecutionTransitionError extends Error {
+  readonly code = "INVALID_EXECUTION_TRANSITION";
+  constructor(from: ExecutionStatus, to: ExecutionStatus) {
+    super(`invalid execution transition ${from} -> ${to}`);
+    this.name = "ExecutionTransitionError";
+  }
+}
+
+export function assertExecutionTransition(from: ExecutionStatus, to: ExecutionStatus): void {
+  if (from === to) {
+    return;
+  }
+  if (!TRANSITIONS[from].includes(to)) {
+    throw new ExecutionTransitionError(from, to);
+  }
+}
+
 export async function openExecution(
   pool: Pool | PoolClient,
   input: OpenExecutionInput
@@ -55,25 +82,78 @@ export async function setExecutionStatus(
   pool: Pool | PoolClient,
   executionId: string,
   status: ExecutionStatus,
-  extra: { finalEntryId?: string | null; completedAt?: Date | null } = {}
+  extra: {
+    organizationId?: string;
+    finalEntryId?: string | null;
+    completedAt?: Date | null;
+  } = {}
 ): Promise<void> {
-  await clientOf(pool).query(
+  const current = extra.organizationId
+    ? await getExecution(pool, extra.organizationId, executionId)
+    : await getExecutionById(pool, executionId);
+  if (!current) {
+    throw new Error("execution not found");
+  }
+  assertExecutionTransition(current.status, status);
+  const result = await clientOf(pool).query(
     `UPDATE audit.executions
      SET status = $2,
          final_entry_id = COALESCE($3, final_entry_id),
          completed_at = COALESCE($4, completed_at)
-     WHERE id = $1`,
-    [executionId, status, extra.finalEntryId ?? null, extra.completedAt ?? null]
+     WHERE id = $1
+       AND ($5::uuid IS NULL OR organization_id = $5)`,
+    [executionId, status, extra.finalEntryId ?? null, extra.completedAt ?? null, extra.organizationId ?? null]
   );
+  if (result.rowCount !== 1) {
+    throw new Error("execution not found");
+  }
 }
 
 export async function getExecution(
-  pool: Pool,
+  pool: Pool | PoolClient,
+  organizationId: string,
   executionId: string
 ): Promise<ExecutionRow | null> {
-  const result = await pool.query<ExecutionRow>(
+  const result = await clientOf(pool).query<ExecutionRow>(
+    `SELECT * FROM audit.executions WHERE id = $1 AND organization_id = $2`,
+    [executionId, organizationId]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function getExecutionByRecord(
+  pool: Pool | PoolClient,
+  organizationId: string,
+  verityRecordId: string
+): Promise<ExecutionRow | null> {
+  const result = await clientOf(pool).query<ExecutionRow>(
+    `SELECT * FROM audit.executions WHERE verity_record_id = $1 AND organization_id = $2`,
+    [verityRecordId, organizationId]
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Internal-only: ledger append looks up by id after it already scoped the write. */
+export async function getExecutionById(
+  pool: Pool | PoolClient,
+  executionId: string
+): Promise<ExecutionRow | null> {
+  const result = await clientOf(pool).query<ExecutionRow>(
     "SELECT * FROM audit.executions WHERE id = $1",
     [executionId]
   );
   return result.rows[0] ?? null;
+}
+
+export async function listExecutions(
+  pool: Pool,
+  organizationId: string
+): Promise<ExecutionRow[]> {
+  const result = await pool.query<ExecutionRow>(
+    `SELECT * FROM audit.executions
+     WHERE organization_id = $1
+     ORDER BY started_at DESC`,
+    [organizationId]
+  );
+  return result.rows;
 }

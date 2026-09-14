@@ -6,6 +6,11 @@ import {
 } from "../hashing/hash.js";
 import { computeMerkleRoot, verifyMerkleProof } from "../merkle/merkle.js";
 import type { EvidenceBundle, VerifyIssue, VerifyResult } from "../types.js";
+import {
+  buildExecutionGraphV2,
+  computeExecutionGraphHash,
+} from "../execution/graph-v2.js";
+import type { ExecutionEventRow } from "../execution/events.js";
 
 export function verifyLedgerEntry(
   entry: EvidenceBundle["ledger_entries"][number],
@@ -175,7 +180,82 @@ export function verifyEvidenceBundle(bundle: EvidenceBundle): VerifyResult {
   const chain = verifyOrganizationChain(bundle.ledger_entries);
   issues.push(...chain.issues);
   issues.push(...verifyMerkleCheckpoints(bundle));
+  issues.push(...verifyExecutionGraphs(bundle));
   return { valid: issues.length === 0, issues };
+}
+
+export function verifyExecutionGraphs(bundle: EvidenceBundle): VerifyIssue[] {
+  const issues: VerifyIssue[] = [];
+  const events = bundle.execution_events ?? [];
+  const graphs = bundle.execution_graphs ?? [];
+  if (events.length === 0 && graphs.length === 0) {
+    return issues;
+  }
+  const executions = new Map(bundle.executions.map((row) => [row.id, row]));
+  for (const graphExport of graphs) {
+    const execution = executions.get(graphExport.execution_id);
+    if (!execution || execution.organization_id !== bundle.manifest.organization_id) {
+      issues.push({
+        code: "GRAPH_ORG_MISMATCH",
+        message: "Execution graph does not belong to the exported organization",
+      });
+      continue;
+    }
+    const related = events
+      .filter((event) => event.execution_id === graphExport.execution_id)
+      .map(
+        (event): ExecutionEventRow => ({
+          id: event.id,
+          organization_id: event.organization_id,
+          execution_id: event.execution_id,
+          event_sequence: event.event_sequence,
+          event_type: event.event_type as ExecutionEventRow["event_type"],
+          status: event.status,
+          parent_event_ids: event.parent_event_ids,
+          input_hash: event.input_hash,
+          output_hash: event.output_hash,
+          metadata: event.metadata,
+          occurred_at: new Date(event.occurred_at_canonical),
+          occurred_at_canonical: event.occurred_at_canonical,
+          created_at: new Date(event.occurred_at_canonical),
+        })
+      );
+    const reconstructed = buildExecutionGraphV2(execution, related);
+    const recomputed = computeExecutionGraphHash(reconstructed);
+    if (recomputed !== graphExport.graph_hash) {
+      issues.push({
+        code: "GRAPH_HASH_MISMATCH",
+        message: "Recomputed execution_graph_hash does not match the export",
+      });
+    }
+    if (graphExport.graph && typeof graphExport.graph === "object") {
+      const embeddedHash = computeExecutionGraphHash(
+        graphExport.graph as Parameters<typeof computeExecutionGraphHash>[0]
+      );
+      if (embeddedHash !== graphExport.graph_hash || embeddedHash !== recomputed) {
+        issues.push({
+          code: "GRAPH_EVIDENCE_MISMATCH",
+          message: "Embedded Execution Graph V2 does not match reconstructed events",
+        });
+      }
+    }
+    const finalEntry = bundle.ledger_entries
+      .filter(
+        (entry) =>
+          entry.execution_id === graphExport.execution_id &&
+          (entry.entry_type === "final" || entry.entry_type === "failure")
+      )
+      .sort((a, b) => b.organization_sequence - a.organization_sequence)[0];
+    if (finalEntry?.execution_graph_hash && finalEntry.execution_graph_hash !== recomputed) {
+      issues.push({
+        code: "GRAPH_LEDGER_MISMATCH",
+        message: "Ledger execution_graph_hash does not match reconstructed graph",
+        sequence: finalEntry.organization_sequence,
+        entry_hash: finalEntry.entry_hash,
+      });
+    }
+  }
+  return issues;
 }
 
 export function verifyExportFile(bundlePath: string): VerifyResult {

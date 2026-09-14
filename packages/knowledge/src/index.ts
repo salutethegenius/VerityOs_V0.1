@@ -50,6 +50,13 @@ export {
   approveSourceVersion,
   createCollection,
   indexSourceVersion,
+  reindexSourceVersion,
   uploadSourceVersion,
 } from "./ingest.js";
 export { retrieve } from "./retrieve.js";
+export {
+  loadRetrievalRun,
+  loadReturnedChunks,
+  markChunksIncludedInContext,
+  type ContextChunk,
+} from "./context.js";

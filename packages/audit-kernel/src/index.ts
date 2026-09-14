@@ -42,14 +42,36 @@ export {
   openExecution,
   setExecutionStatus,
   getExecution,
+  getExecutionByRecord,
+  listExecutions,
+  assertExecutionTransition,
+  ExecutionTransitionError,
   type OpenExecutionInput,
 } from "./execution/executions.js";
+export {
+  appendExecutionEvent,
+  listExecutionEvents,
+  type ExecutionEventRow,
+  type AppendExecutionEventInput,
+} from "./execution/events.js";
+export {
+  GRAPH_SCHEMA_VERSION,
+  buildExecutionGraphV2,
+  computeExecutionGraphHash,
+} from "./execution/graph-v2.js";
+export {
+  sealExecution,
+  sealExecutionInTransaction,
+  type SealExecutionInput,
+  type SealExecutionResult,
+} from "./execution/finalize.js";
 export { exportOrganizationEvidence, serializeEvidenceBundle, ledgerRowToExport } from "./export/bundle.js";
 export {
   verifyLedgerEntry,
   verifyOrganizationChain,
   verifyMerkleCheckpoints,
   verifyEvidenceBundle,
+  verifyExecutionGraphs,
   verifyExportFile,
 } from "./verify/verify.js";
 export type {

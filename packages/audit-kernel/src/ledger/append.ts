@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import pg, { type Pool, type PoolClient } from "pg";
-import type { LedgerEntryType } from "@verityos/contracts";
+import type { ExecutionStatus, LedgerEntryType } from "@verityos/contracts";
 import {
   HASH_FORMAT_VERSION,
   KERNEL_VERSION,
@@ -32,6 +32,7 @@ export interface AppendLedgerInput {
   merkleSnapshotInterval?: number;
   createdAtCanonical?: string;
   kernelVersion?: string;
+  executionStatus?: ExecutionStatus;
 }
 
 function assertIsPool(db: unknown): asserts db is Pool {
@@ -204,16 +205,22 @@ export async function appendLedgerEntryInTransaction(
   }
 
   if (input.entryType === "request_opened") {
-    await setExecutionStatus(client, input.executionId, "running");
+    await setExecutionStatus(client, input.executionId, input.executionStatus ?? "running", {
+      organizationId: input.organizationId,
+    });
   } else if (input.entryType === "approval_requested") {
-    await setExecutionStatus(client, input.executionId, "waiting_approval");
+    await setExecutionStatus(client, input.executionId, input.executionStatus ?? "waiting_approval", {
+      organizationId: input.organizationId,
+    });
   } else if (input.entryType === "final") {
-    await setExecutionStatus(client, input.executionId, "completed", {
+    await setExecutionStatus(client, input.executionId, input.executionStatus ?? "completed", {
+      organizationId: input.organizationId,
       finalEntryId: row.id,
       completedAt: new Date(createdAtCanonical),
     });
   } else if (input.entryType === "failure") {
-    await setExecutionStatus(client, input.executionId, "failed", {
+    await setExecutionStatus(client, input.executionId, input.executionStatus ?? "failed", {
+      organizationId: input.organizationId,
       finalEntryId: row.id,
       completedAt: new Date(createdAtCanonical),
     });

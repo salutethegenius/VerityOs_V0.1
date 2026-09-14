@@ -35,6 +35,8 @@ Phase 3–6 implements identity, Command policy, Model Router V2, and native Ver
 
 ## Current phase boundary
 
-**In scope:** identity and organization isolation, Command policy evaluation, Model Router V2 (mock + HTTP adapters), native Verity Knowledge (hybrid retrieval, versioned sources).
+**In scope through Phase 7:** identity and organization isolation, Command policy evaluation, Model Router V2 (mock + HTTP adapters), native Verity Knowledge (hybrid retrieval, versioned sources), unified execution lifecycle, Execution Graph V2, Verity Record APIs, and offline graph+ledger verification.
 
-**Out of scope until a later prompt:** Nova runtime migration, connectors, Verity Shell UI, Execution Graph V2, signing/external anchoring, OIDC/SAML.
+**Out of scope until a later prompt:** Nova runtime migration, connectors, Verity Shell UI, signing/external anchoring, OIDC/SAML.
+
+See [execution-graph-v2.md](execution-graph-v2.md).

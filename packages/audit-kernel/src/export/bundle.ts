@@ -3,6 +3,8 @@ import { KERNEL_VERSION, canonicalTimestampNow } from "../hashing/hash.js";
 import { getMerkleProof } from "../merkle/merkle.js";
 import type { EvidenceBundle, ExecutionRow, LedgerEntryRow } from "../types.js";
 import { getLedgerEntries, getMerkleCheckpoints } from "../ledger/append.js";
+import { listExecutionEvents, type ExecutionEventRow } from "../execution/events.js";
+import { buildExecutionGraphV2, computeExecutionGraphHash } from "../execution/graph-v2.js";
 
 export async function exportOrganizationEvidence(
   pool: Pool,
@@ -19,6 +21,26 @@ export async function exportOrganizationEvidence(
     ),
   ]);
 
+  const eventRows: ExecutionEventRow[] = [];
+  const graphs: NonNullable<EvidenceBundle["execution_graphs"]> = [];
+  for (const execution of executions.rows) {
+    const events = await listExecutionEvents(pool, organizationId, execution.id);
+    eventRows.push(...events);
+    if (events.length === 0) {
+      continue;
+    }
+    const graph = buildExecutionGraphV2(execution, events);
+    graphs.push({
+      schema_version: graph.schema_version,
+      execution_id: graph.execution_id,
+      verity_record_id: graph.verity_record_id,
+      organization_id: graph.organization_id,
+      status: graph.status,
+      graph_hash: computeExecutionGraphHash(graph),
+      graph,
+    });
+  }
+
   return {
     manifest: {
       format_version: "1.0",
@@ -28,6 +50,7 @@ export async function exportOrganizationEvidence(
       exported_at: canonicalTimestampNow(),
       entry_count: entries.length,
       includes_plaintext: false,
+      execution_graph_schema_version: graphs.length > 0 ? graphs[0].schema_version : undefined,
     },
     ledger_entries: entries.map((entry) => {
       const checkpoint = checkpoints.find(
@@ -63,6 +86,20 @@ export async function exportOrganizationEvidence(
           ? row.created_at.toISOString()
           : String(row.created_at),
     })),
+    execution_events: eventRows.map((event) => ({
+      id: event.id,
+      organization_id: event.organization_id,
+      execution_id: event.execution_id,
+      event_sequence: event.event_sequence,
+      event_type: event.event_type,
+      status: event.status,
+      parent_event_ids: event.parent_event_ids,
+      input_hash: event.input_hash,
+      output_hash: event.output_hash,
+      metadata: event.metadata,
+      occurred_at_canonical: event.occurred_at_canonical,
+    })),
+    execution_graphs: graphs,
   };
 }
 

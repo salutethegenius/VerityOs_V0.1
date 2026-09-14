@@ -20,16 +20,18 @@
 - Knowledge collection ACL (including same-org roles with global `knowledge.read` but no `can_read`)
 - Unapproved source versions in strict, grounded, and general retrieval
 - Session-authenticated CSRF via disallowed or missing `Origin` on POST/PUT/PATCH/DELETE
+- Cross-organization Execution Graph V2 / Verity Record reads, verifies, exports, and event attachment
+- Silent embedding-provider mismatch during index (must return `REINDEX_REQUIRED` or use explicit reindex)
 
 ## Explicitly deferred
 
 - OIDC/SAML and a general-purpose CSRF token framework (V0.1 uses a strict allowed-Origin check plus SameSite cookies)
 - Session fixation beyond hashed tokens
 - Connector (Slack/Meta) implementation and abuse
-- Execution Graph V2 cryptographic commitment of identity/policy/retrieval
 - Supply-chain / dependency scanning beyond CI install
 - Signing and external chain anchoring
 - OCR and unapproved-version preview as a management capability
+- Nova runtime migration and Verity Shell UI
 
 Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. External clients talk to Core API; Knowledge retrieve is internal-or-session, never a public unauthenticated surface.
 
@@ -37,6 +39,8 @@ Anonymous management APIs for organizations, Knowledge, models, users, policies,
 
 V0.2 offline verification proves **chain/internal integrity**: a verifier that holds an evidence bundle can detect modification of hashed fields, broken previous-hash links, and invalid Merkle proofs for the entries in that bundle.
 
+When Execution Graph V2 events are present, verification also reconstructs the graph, recomputes `execution_graph_hash`, and compares it to the exported graph and to a non-null ledger `execution_graph_hash`. Older V2 rows with `execution_graph_hash = null` remain valid under Hash Format V2. Graph schema version `"2"` is not `hash_format_version`.
+
 V0.2 does **not** prove freshness or completeness against rollback or truncation. The organization chain head is not externally signed or anchored. An exporter who omits suffix entries, or a database restored to an earlier chain_state, can produce a bundle that still verifies internally. Signing and external anchoring are out of scope for this pass.
 
-Execution metadata on `audit.executions` (actor, skill, risk tier, policy version, status) is **contextual** until Execution Graph V2 cryptographically commits identity, policy, Knowledge retrieval, approvals, and action evidence. Those commitments are Phase 7+ and are not implied by a sealed V2 ledger row today.
+Integrity language is `integrity_verified` / `provenance_verified`. Offline verification does not claim factual truth.

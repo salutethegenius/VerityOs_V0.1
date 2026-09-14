@@ -380,7 +380,6 @@ describe("service credentials and CSRF", () => {
       payload: {
         organization_id: org.organization_id,
         actor_id: org.admin_user_id,
-        execution_id: randomUUID(),
         task: "summarize",
         risk_tier: "low",
         data_classification: "internal",

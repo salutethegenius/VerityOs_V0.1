@@ -8,7 +8,7 @@ Nova is not VerityOS. Knowledge is not VerityOS. The Audit Kernel is not VerityO
 
 ## Current status
 
-Phase 3–6: identity, Command policy, Model Router V2, and native Verity Knowledge on the frozen Audit Kernel V2 (`hash_format_version = "2"`). See [docs/architecture/hash-format-v2.md](docs/architecture/hash-format-v2.md) and [docs/security/threat-model.md](docs/security/threat-model.md). Nova migration and Verity Shell UI are not in this pass.
+Phase 7: unified execution lifecycle and Execution Graph V2 on the frozen Audit Kernel V2 (`hash_format_version = "2"`). See [docs/architecture/execution-graph-v2.md](docs/architecture/execution-graph-v2.md), [docs/architecture/hash-format-v2.md](docs/architecture/hash-format-v2.md) and [docs/security/threat-model.md](docs/security/threat-model.md). Nova migration and Verity Shell UI are not in this pass.
 
 Production Nova remains the [Content Loop](https://github.com/salutethegenius/Content-Loop) deployment. This repository does not modify that production system.
 

@@ -54,6 +54,7 @@ export interface EvidenceBundle {
     exported_at: string;
     entry_count: number;
     includes_plaintext: false;
+    execution_graph_schema_version?: string;
   };
   ledger_entries: Array<
     Omit<LedgerEntryRow, "created_at"> & {
@@ -70,6 +71,28 @@ export interface EvidenceBundle {
   merkle_checkpoints: Array<
     Omit<MerkleCheckpointRow, "created_at"> & { created_at: string }
   >;
+  execution_events?: Array<{
+    id: string;
+    organization_id: string;
+    execution_id: string;
+    event_sequence: number;
+    event_type: string;
+    status: string;
+    parent_event_ids: string[];
+    input_hash: string | null;
+    output_hash: string | null;
+    metadata: Record<string, unknown>;
+    occurred_at_canonical: string;
+  }>;
+  execution_graphs?: Array<{
+    schema_version: string;
+    execution_id: string;
+    verity_record_id: string;
+    organization_id: string;
+    status: string;
+    graph_hash: string;
+    graph: unknown;
+  }>;
 }
 
 export interface VerifyIssue {
