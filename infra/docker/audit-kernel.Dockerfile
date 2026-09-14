@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM node:20-bookworm-slim
 WORKDIR /app
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.33.3 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/audit-kernel/package.json packages/audit-kernel/
 COPY packages/contracts/package.json packages/contracts/
