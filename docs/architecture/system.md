@@ -22,7 +22,7 @@ VerityOS is a governed, grounded, auditable AI operating environment. Nova, Know
           local | private | cloud
 ```
 
-Phase 0–2 implements only the Audit Kernel foundation inside this monorepo. Higher layers must not be built on a ledger whose correctness has not been proven.
+Phase 3–6 implements identity, Command policy, Model Router V2, and native Verity Knowledge on top of the frozen Audit Kernel. The Kernel is a dependency and trust boundary; Hash Format V2 is not modified.
 
 ## Non-negotiable rules
 
@@ -35,6 +35,6 @@ Phase 0–2 implements only the Audit Kernel foundation inside this monorepo. Hi
 
 ## Current phase boundary
 
-**In scope:** freeze inventory, monorepo skeleton, Audit Kernel V2 (organization chains, transactional append, canonical hashing, Merkle proofs with explicit direction, checkpoints, offline verifier).
+**In scope:** identity and organization isolation, Command policy evaluation, Model Router V2 (mock + HTTP adapters), native Verity Knowledge (hybrid retrieval, versioned sources).
 
-**Out of scope until a later prompt:** Identity/RBAC, Command policies, Model Router V2, Knowledge, Nova runtime migration, connectors, Verity Shell, Hummingbird image.
+**Out of scope until a later prompt:** Nova runtime migration, connectors, Verity Shell UI, Execution Graph V2, signing/external anchoring, OIDC/SAML.

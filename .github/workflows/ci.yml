@@ -33,9 +33,9 @@ jobs:
           cache: pnpm
       - run: pnpm install
       - run: pnpm db:migrate
+      - run: pnpm build
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm build
 
   python:
     runs-on: ubuntu-latest

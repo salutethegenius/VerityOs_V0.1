@@ -1,0 +1,31 @@
+{
+  "name": "@verityos/knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.7.0",
+    "@verityos/contracts": "workspace:*",
+    "jszip": "^3.10.1",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,4 +1,4 @@
-# Threat model (Phase 2 scope)
+# Threat model (Phase 3–6 scope)
 
 ## In scope for the Audit Kernel
 
@@ -9,15 +9,24 @@
 - Cross-organization chain mixing
 - Offline export that includes confidential plaintext by default (V2 export is hashes and metadata only)
 
+## In scope for identity, Command, models, and Knowledge
+
+- Cross-organization isolation of users, roles, models, policies, collections, sources, retrieval runs, and audit exports
+- Forged `organization_id` / `actor_id` on client or internal retrieve requests
+- Unauthenticated management APIs
+- Invalid service credentials
+- Classification leaving the device / cloud model use
+- Knowledge ACL and unapproved versions in strict mode
+
 ## Explicitly deferred
 
-- Authentication, RBAC, CSRF, session theft (Phase 3+)
-- Cross-tenant Knowledge/Nova access
-- Model-provider exfiltration policy
-- Slack/Meta connector abuse
+- OIDC/SAML, CSRF tokens beyond SameSite cookies, session fixation beyond hashed tokens
+- Connector (Slack/Meta) implementation and abuse
+- Execution Graph V2 cryptographic commitment of identity/policy/retrieval
 - Supply-chain / dependency scanning beyond CI install
+- Signing and external chain anchoring
 
-Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. Phase 2 exposes Kernel as a library and CLI, not a public management plane.
+Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. External clients talk to Core API; Knowledge retrieve is internal-or-session, never a public unauthenticated surface.
 
 ## Trust boundary of V0.2 offline verification
 

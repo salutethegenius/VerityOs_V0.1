@@ -8,7 +8,7 @@ Nova is not VerityOS. Knowledge is not VerityOS. The Audit Kernel is not VerityO
 
 ## Current status
 
-Phase 0–2: monorepo skeleton and **Audit Kernel V2**. Canonical Hash Format V2 is frozen (`hash_format_version = "2"`); see [docs/architecture/hash-format-v2.md](docs/architecture/hash-format-v2.md). V0.2 offline verification proves chain integrity, not freshness against rollback; see [docs/security/threat-model.md](docs/security/threat-model.md). Identity, Knowledge, Nova migration, and Verity Shell are not in this pass.
+Phase 3–6: identity, Command policy, Model Router V2, and native Verity Knowledge on the frozen Audit Kernel V2 (`hash_format_version = "2"`). See [docs/architecture/hash-format-v2.md](docs/architecture/hash-format-v2.md) and [docs/security/threat-model.md](docs/security/threat-model.md). Nova migration and Verity Shell UI are not in this pass.
 
 Production Nova remains the [Content Loop](https://github.com/salutethegenius/Content-Loop) deployment. This repository does not modify that production system.
 
@@ -16,7 +16,7 @@ Production Nova remains the [Content Loop](https://github.com/salutethegenius/Co
 
 ```text
 apps/           core-api, shell stubs; nova/knowledge Python stubs
-packages/       audit-kernel, contracts, sdk-ts, sdk-python
+packages/       audit-kernel, identity, command, model-router, knowledge, contracts, sdks
 db/migrations   single node-pg-migrate history
 tests/          audit tests and Nova behavior fixtures
 docs/           architecture, security, deployment, migration inventory
