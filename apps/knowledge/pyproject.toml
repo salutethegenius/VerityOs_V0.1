@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "verityos-knowledge"
 version = "0.1.0.dev0"
-description = "Verity Knowledge stub — not implemented in Phase 0-2"
+description = "Verity Knowledge extractors and hashing helpers"
 requires-python = ">=3.12"
 dependencies = []
 
