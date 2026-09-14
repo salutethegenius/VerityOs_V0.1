@@ -10,6 +10,6 @@ COPY apps/core-api/package.json apps/core-api/
 COPY apps/shell/package.json apps/shell/
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm --filter @verityos/audit-kernel build
+RUN pnpm --filter "@verityos/audit-kernel..." build
 ENTRYPOINT ["node", "packages/audit-kernel/dist/cli.js"]
 CMD ["--help"]
