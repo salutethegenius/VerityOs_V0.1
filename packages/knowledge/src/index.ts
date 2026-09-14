@@ -1,7 +1,33 @@
+export { KnowledgeError } from "./errors.js";
 export {
+  canApprove,
+  canManage,
+  canRead,
+  collectionIdForSource,
+  collectionIdForVersion,
+  collectionIdsForRetrievalRun,
+  getCollectionPermission,
+  listReadableCollections,
+  requireCollectionPermission,
+  type CollectionCapability,
+  type CollectionPermission,
+} from "./acl.js";
+export {
+  PRODUCTION_EMBEDDING_DIMENSIONS,
+  MockEmbeddingProvider,
+  OpenAICompatibleEmbeddingProvider,
+  embeddingProviderFromEnv,
+  type EmbeddingProvider,
+} from "./embed.js";
+export {
+  MAX_DOCX_FILES,
+  MAX_DOCX_UNCOMPRESSED_BYTES,
   MAX_UPLOAD_BYTES,
   PARSER_VERSION,
+  assertDocx,
+  assertPdf,
   assertSafeFilename,
+  assertSafeText,
   assertUpload,
   blobPath,
   dataDir,

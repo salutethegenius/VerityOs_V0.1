@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
+  TEST_ORIGIN,
   createOrg,
   createPool,
   login,
   markdownPart,
   seedPlatformService,
+  sessionHeaders,
   startApp,
 } from "./helpers.js";
 
@@ -32,6 +34,7 @@ describe("Phase 3 identity", () => {
     const ok = await app.inject({
       method: "POST",
       url: "/v1/auth/login",
+      headers: { origin: TEST_ORIGIN },
       payload: { email: org.email, password: org.password },
     });
     expect(ok.statusCode).toBe(200);
@@ -40,6 +43,7 @@ describe("Phase 3 identity", () => {
     const bad = await app.inject({
       method: "POST",
       url: "/v1/auth/login",
+      headers: { origin: TEST_ORIGIN },
       payload: { email: org.email, password: "wrong-password-value" },
     });
     expect(bad.statusCode).toBe(401);
@@ -54,7 +58,7 @@ describe("Phase 3 identity", () => {
     const created = await app.inject({
       method: "POST",
       url: "/v1/users",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         email: memberEmail,
         password: "member-horse-battery",
@@ -67,14 +71,14 @@ describe("Phase 3 identity", () => {
     const denied = await app.inject({
       method: "POST",
       url: "/v1/knowledge/collections",
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
       payload: { name: "secret", classification: "internal" },
     });
     expect(denied.statusCode).toBe(403);
     const allowed = await app.inject({
       method: "GET",
       url: "/v1/knowledge/collections",
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
     });
     expect(allowed.statusCode).toBe(200);
   });
@@ -87,7 +91,7 @@ describe("Phase 4 command", () => {
     const allow = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         action: {
           type: "skill.use",
@@ -105,7 +109,7 @@ describe("Phase 4 command", () => {
     await app.inject({
       method: "POST",
       url: "/v1/users",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         email: memberEmail,
         password: "member-horse-battery",
@@ -117,7 +121,7 @@ describe("Phase 4 command", () => {
     const roleDeny = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
       payload: {
         action: {
           type: "skill.use",
@@ -133,7 +137,7 @@ describe("Phase 4 command", () => {
     const classDeny = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
       payload: {
         action: { type: "data.leave_device", classification: "restricted" },
       },
@@ -143,7 +147,7 @@ describe("Phase 4 command", () => {
     const skillDeny = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
       payload: {
         action: {
           type: "skill.use",
@@ -158,7 +162,7 @@ describe("Phase 4 command", () => {
     const approval = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         action: {
           type: "skill.use",
@@ -173,7 +177,7 @@ describe("Phase 4 command", () => {
     const exportRes = await app.inject({
       method: "GET",
       url: "/v1/audit/export",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
     });
     expect(exportRes.statusCode).toBe(403);
     expect(exportRes.json().error.code).toBe("APPROVAL_REQUIRED");
@@ -181,7 +185,7 @@ describe("Phase 4 command", () => {
     const modelDeny = await app.inject({
       method: "POST",
       url: "/v1/policies/evaluate",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         action: {
           type: "model.process",
@@ -204,7 +208,7 @@ describe("Phase 4 command", () => {
     const selfApprove = await app.inject({
       method: "POST",
       url: `/v1/approvals/${approvalId}/decide`,
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: { allow: true },
     });
     expect(selfApprove.statusCode).toBe(403);
@@ -213,7 +217,7 @@ describe("Phase 4 command", () => {
     const memberDecide = await app.inject({
       method: "POST",
       url: `/v1/approvals/${approvalId}/decide`,
-      headers: { cookie: member.cookie },
+      headers: sessionHeaders(member.cookie),
       payload: { allow: true },
     });
     expect(memberDecide.statusCode).toBe(403);
@@ -228,7 +232,7 @@ describe("Phase 5 model router", () => {
     const mock = await app.inject({
       method: "POST",
       url: "/v1/models/route",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         task: "summarize",
         risk_tier: "low",
@@ -245,7 +249,7 @@ describe("Phase 5 model router", () => {
     const restricted = await app.inject({
       method: "POST",
       url: "/v1/models/route",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         task: "summarize",
         risk_tier: "low",
@@ -259,7 +263,7 @@ describe("Phase 5 model router", () => {
     await app.inject({
       method: "POST",
       url: "/v1/models",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         model_key: "tiny-cloud",
         provider: "openai",
@@ -280,7 +284,7 @@ describe("Phase 5 model router", () => {
     const none = await app.inject({
       method: "POST",
       url: "/v1/models/route",
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
       payload: {
         task: "summarize",
         risk_tier: "high",
@@ -304,7 +308,7 @@ describe("Phase 6 knowledge and exit gate", () => {
     const collection = await app.inject({
       method: "POST",
       url: "/v1/knowledge/collections",
-      headers: { cookie: adminA.cookie },
+      headers: sessionHeaders(adminA.cookie),
       payload: { name: "Policies", classification: "internal" },
     });
     expect(collection.statusCode).toBe(200);
@@ -313,10 +317,9 @@ describe("Phase 6 knowledge and exit gate", () => {
     const uploaded = await app.inject({
       method: "POST",
       url: `/v1/knowledge/collections/${collectionId}/sources`,
-      headers: {
-        cookie: adminA.cookie,
+      headers: sessionHeaders(adminA.cookie, {
         "content-type": "multipart/form-data; boundary=----veritytest",
-      },
+      }),
       payload: markdownPart("france.md", FACT, "France facts"),
     });
     expect(uploaded.statusCode).toBe(200);
@@ -327,14 +330,14 @@ describe("Phase 6 knowledge and exit gate", () => {
     const approved = await app.inject({
       method: "POST",
       url: `/v1/knowledge/versions/${versionId}/approve`,
-      headers: { cookie: adminA.cookie },
+      headers: sessionHeaders(adminA.cookie),
     });
     expect(approved.statusCode).toBe(200);
 
     const indexed = await app.inject({
       method: "POST",
       url: `/v1/knowledge/versions/${versionId}/index`,
-      headers: { cookie: adminA.cookie },
+      headers: sessionHeaders(adminA.cookie),
     });
     expect(indexed.statusCode).toBe(200);
     expect(indexed.json().chunkCount).toBeGreaterThan(0);
@@ -380,7 +383,7 @@ describe("Phase 6 knowledge and exit gate", () => {
     const routed = await app.inject({
       method: "POST",
       url: "/v1/models/route",
-      headers: { cookie: adminA.cookie },
+      headers: sessionHeaders(adminA.cookie),
       payload: {
         task: "answer-from-knowledge",
         risk_tier: "low",
@@ -395,21 +398,21 @@ describe("Phase 6 knowledge and exit gate", () => {
     const bCollection = await app.inject({
       method: "GET",
       url: `/v1/knowledge/sources/${sourceId}`,
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
     });
     expect(bCollection.statusCode).toBe(404);
 
     const bRun = await app.inject({
       method: "GET",
       url: `/v1/knowledge/runs/${runId}`,
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
     });
     expect(bRun.statusCode).toBe(404);
 
     const bUsers = await app.inject({
       method: "GET",
       url: "/v1/users",
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
     });
     expect(bUsers.json().users.every((u: { email: string }) => u.email !== orgA.email)).toBe(
       true
@@ -418,7 +421,7 @@ describe("Phase 6 knowledge and exit gate", () => {
     const bRetrieve = await app.inject({
       method: "POST",
       url: "/v1/knowledge/retrieve",
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
       payload: {
         organization_id: orgA.organization_id,
         query: "What is the capital of France?",
@@ -434,16 +437,16 @@ describe("Phase 6 knowledge and exit gate", () => {
       url: `/v1/policies/${(await app.inject({
         method: "GET",
         url: "/v1/policies",
-        headers: { cookie: adminA.cookie },
+        headers: sessionHeaders(adminA.cookie),
       })).json().policies[0].id}`,
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
     });
     expect(bPolicy.statusCode).toBe(404);
 
     const bModels = await app.inject({
       method: "GET",
       url: "/v1/models",
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
     });
     expect(
       bModels.json().models.every((m: { organization_id: string }) => m.organization_id === orgB.organization_id)
@@ -452,7 +455,7 @@ describe("Phase 6 knowledge and exit gate", () => {
     const forged = await app.inject({
       method: "POST",
       url: "/v1/knowledge/collections",
-      headers: { cookie: adminB.cookie },
+      headers: sessionHeaders(adminB.cookie),
       payload: {
         name: "steal",
         classification: "internal",
@@ -485,7 +488,7 @@ describe("security", () => {
     const missing = await app.inject({
       method: "GET",
       url: `/v1/knowledge/sources/${randomUUID()}`,
-      headers: { cookie: admin.cookie },
+      headers: sessionHeaders(admin.cookie),
     });
     expect(missing.statusCode).toBe(404);
   });

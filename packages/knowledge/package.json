@@ -20,6 +20,7 @@
     "@noble/hashes": "^1.7.0",
     "@verityos/contracts": "workspace:*",
     "jszip": "^3.10.1",
+    "pdfjs-dist": "4.10.38",
     "pg": "^8.13.0"
   },
   "devDependencies": {

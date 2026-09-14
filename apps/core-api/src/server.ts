@@ -32,9 +32,15 @@ import {
   type ServiceContext,
 } from "@verityos/identity";
 import {
+  KnowledgeError,
   approveSourceVersion,
+  collectionIdForSource,
+  collectionIdForVersion,
+  collectionIdsForRetrievalRun,
   createCollection,
   indexSourceVersion,
+  listReadableCollections,
+  requireCollectionPermission,
   retrieve,
   uploadSourceVersion,
 } from "@verityos/knowledge";
@@ -93,11 +99,17 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   });
 
   await app.register(cookie, { secret: config.sessionSecret });
+  const allowedOrigins = config.corsOrigin
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
   await app.register(cors, {
-    origin: config.corsOrigin.split(",").map((s) => s.trim()),
+    origin: allowedOrigins,
     credentials: true,
     allowedHeaders: ["content-type", "authorization", "x-request-id", "x-verity-organization-id"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   });
   await app.register(multipart, {
     limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 10 },
@@ -109,11 +121,21 @@ export async function buildServer(options: { pool?: Pool } = {}) {
         ? request.headers["x-request-id"]
         : randomUUID();
     reply.header("x-request-id", request.requestId);
+    if (!unsafeMethods.has(request.method)) {
+      return;
+    }
+    if (bearer(request)) {
+      return;
+    }
+    const origin = request.headers.origin;
+    if (typeof origin !== "string" || !allowedOrigins.includes(origin)) {
+      throw new ApiError(403, "ORIGIN_DENIED", "origin is not allowed");
+    }
   });
 
   app.setErrorHandler((err, request, reply) => {
     const mapped =
-      err instanceof AuthError
+      err instanceof AuthError || err instanceof KnowledgeError
         ? { statusCode: err.statusCode, code: err.code, message: err.message }
         : publicMessage(err);
     const status = mapped.statusCode >= 400 ? mapped.statusCode : 500;
@@ -226,16 +248,22 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       scopes?: string[];
       secret?: string;
     };
-    if (!body.name || !body.secret || !body.scopes) {
-      throw new ApiError(400, "INVALID_INPUT", "name, secret, and scopes are required");
+    if (body.secret) {
+      throw new ApiError(
+        400,
+        "SECRET_NOT_ACCEPTED",
+        "caller-chosen secrets are not accepted; the server generates the credential"
+      );
     }
-    const id = await createServiceCredential(pool, {
+    if (!body.name || !body.scopes) {
+      throw new ApiError(400, "INVALID_INPUT", "name and scopes are required");
+    }
+    const created = await createServiceCredential(pool, {
       name: body.name,
       organizationId: body.organization_id ?? null,
       scopes: body.scopes,
-      secret: body.secret,
     });
-    return { id };
+    return { id: created.id, token: created.token };
   });
 
   app.get("/v1/users", async (request) => {
@@ -368,6 +396,46 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     return { model_id: id };
   });
 
+  async function routeAndAudit(input: {
+      organizationId: string;
+      actorId: string;
+      roleId: string;
+      sessionId?: string;
+      executionId?: string;
+      task: string;
+      riskTier: "low" | "medium" | "high";
+      dataClassification: DataClassification;
+      requiredCapabilities?: string[];
+      preferLocal?: boolean;
+    }
+  ) {
+    const routed = await routeModel(pool, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      roleId: input.roleId,
+      request: {
+        execution_id: input.executionId ?? randomUUID(),
+        task: input.task,
+        risk_tier: input.riskTier,
+        data_classification: input.dataClassification,
+        required_capabilities: input.requiredCapabilities ?? ["chat"],
+        prefer_local: input.preferLocal ?? false,
+      },
+    });
+    if (routed.model_id) {
+      await recordKernelCheckpoint(pool, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        sessionId: input.sessionId,
+        skillId: "models.route",
+        entryType: "action_completed",
+        request: { task: input.task, classification: input.dataClassification },
+        response: routed,
+      });
+    }
+    return routed;
+  }
+
   app.post("/v1/models/route", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "models.read");
@@ -381,44 +449,29 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       prefer_local?: boolean;
     };
     assertOrganizationScope(auth.organizationId, body.organization_id);
-    const routed = await routeModel(pool, {
+    return routeAndAudit({
       organizationId: auth.organizationId,
       actorId: auth.userId,
       roleId: auth.roleId,
-      request: {
-        execution_id: body.execution_id ?? randomUUID(),
-        task: body.task,
-        risk_tier: body.risk_tier,
-        data_classification: body.data_classification,
-        required_capabilities: body.required_capabilities ?? ["chat"],
-        prefer_local: body.prefer_local ?? false,
-      },
+      sessionId: auth.sessionId,
+      executionId: body.execution_id,
+      task: body.task,
+      riskTier: body.risk_tier,
+      dataClassification: body.data_classification,
+      requiredCapabilities: body.required_capabilities,
+      preferLocal: body.prefer_local,
     });
-    if (routed.model_id) {
-      await recordKernelCheckpoint(pool, {
-        organizationId: auth.organizationId,
-        actorId: auth.userId,
-        sessionId: auth.sessionId,
-        skillId: "models.route",
-        entryType: "action_completed",
-        request: { task: body.task, classification: body.data_classification },
-        response: routed,
-      });
-    }
-    return routed;
   });
 
   app.get("/v1/knowledge/collections", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.read");
-    const rows = await pool.query(
-      `SELECT id, name, classification, created_at
-       FROM knowledge.collections
-       WHERE organization_id = $1
-       ORDER BY name`,
-      [auth.organizationId]
-    );
-    return { collections: rows.rows };
+    return {
+      collections: await listReadableCollections(pool, {
+        organizationId: auth.organizationId,
+        roleId: auth.roleId,
+      }),
+    };
   });
 
   app.post("/v1/knowledge/collections", async (request) => {
@@ -454,6 +507,12 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.manage");
     const { collectionId } = request.params as { collectionId: string };
+    await requireCollectionPermission(pool, {
+      organizationId: auth.organizationId,
+      collectionId,
+      roleId: auth.roleId,
+      capability: "can_manage",
+    });
     const file = await request.file();
     if (!file) {
       throw new ApiError(400, "INVALID_INPUT", "file is required");
@@ -489,6 +548,16 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.approve");
     const { versionId } = request.params as { versionId: string };
+    const collectionId = await collectionIdForVersion(pool, {
+      organizationId: auth.organizationId,
+      versionId,
+    });
+    await requireCollectionPermission(pool, {
+      organizationId: auth.organizationId,
+      collectionId,
+      roleId: auth.roleId,
+      capability: "can_approve",
+    });
     await approveSourceVersion(pool, {
       organizationId: auth.organizationId,
       versionId,
@@ -501,6 +570,16 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.manage");
     const { versionId } = request.params as { versionId: string };
+    const collectionId = await collectionIdForVersion(pool, {
+      organizationId: auth.organizationId,
+      versionId,
+    });
+    await requireCollectionPermission(pool, {
+      organizationId: auth.organizationId,
+      collectionId,
+      roleId: auth.roleId,
+      capability: "can_manage",
+    });
     const result = await indexSourceVersion(pool, {
       organizationId: auth.organizationId,
       versionId,
@@ -639,18 +718,16 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     if (!membership.rows[0]) {
       throw new ApiError(403, "NOT_A_MEMBER", "actor is not a member of that organization");
     }
-    return routeModel(pool, {
+    return routeAndAudit({
       organizationId,
       actorId: body.actor_id,
       roleId: membership.rows[0].role_id,
-      request: {
-        execution_id: body.execution_id,
-        task: body.task,
-        risk_tier: body.risk_tier,
-        data_classification: body.data_classification,
-        required_capabilities: body.required_capabilities ?? ["chat"],
-        prefer_local: body.prefer_local ?? false,
-      },
+      executionId: body.execution_id,
+      task: body.task,
+      riskTier: body.risk_tier,
+      dataClassification: body.data_classification,
+      requiredCapabilities: body.required_capabilities,
+      preferLocal: body.prefer_local,
     });
   });
 
@@ -687,6 +764,18 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.read");
     const { runId } = request.params as { runId: string };
+    const collectionIds = await collectionIdsForRetrievalRun(pool, {
+      organizationId: auth.organizationId,
+      runId,
+    });
+    for (const collectionId of collectionIds) {
+      await requireCollectionPermission(pool, {
+        organizationId: auth.organizationId,
+        collectionId,
+        roleId: auth.roleId,
+        capability: "can_read",
+      });
+    }
     const run = await pool.query(
       `SELECT * FROM knowledge.retrieval_runs WHERE id = $1 AND organization_id = $2`,
       [runId, auth.organizationId]
@@ -701,6 +790,16 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.read");
     const { sourceId } = request.params as { sourceId: string };
+    const collectionId = await collectionIdForSource(pool, {
+      organizationId: auth.organizationId,
+      sourceId,
+    });
+    await requireCollectionPermission(pool, {
+      organizationId: auth.organizationId,
+      collectionId,
+      roleId: auth.roleId,
+      capability: "can_read",
+    });
     const source = await pool.query(
       `SELECT * FROM knowledge.sources WHERE id = $1 AND organization_id = $2`,
       [sourceId, auth.organizationId]

@@ -12,19 +12,24 @@
 ## In scope for identity, Command, models, and Knowledge
 
 - Cross-organization isolation of users, roles, models, policies, collections, sources, retrieval runs, and audit exports
+- Composite database foreign keys so organization-owned relationships cannot cross organizations
 - Forged `organization_id` / `actor_id` on client or internal retrieve requests
 - Unauthenticated management APIs
-- Invalid service credentials
+- Invalid, revoked, or org-escaping service credentials
 - Classification leaving the device / cloud model use
-- Knowledge ACL and unapproved versions in strict mode
+- Knowledge collection ACL (including same-org roles with global `knowledge.read` but no `can_read`)
+- Unapproved source versions in strict, grounded, and general retrieval
+- Session-authenticated CSRF via disallowed or missing `Origin` on POST/PUT/PATCH/DELETE
 
 ## Explicitly deferred
 
-- OIDC/SAML, CSRF tokens beyond SameSite cookies, session fixation beyond hashed tokens
+- OIDC/SAML and a general-purpose CSRF token framework (V0.1 uses a strict allowed-Origin check plus SameSite cookies)
+- Session fixation beyond hashed tokens
 - Connector (Slack/Meta) implementation and abuse
 - Execution Graph V2 cryptographic commitment of identity/policy/retrieval
 - Supply-chain / dependency scanning beyond CI install
 - Signing and external chain anchoring
+- OCR and unapproved-version preview as a management capability
 
 Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. External clients talk to Core API; Knowledge retrieve is internal-or-session, never a public unauthenticated surface.
 

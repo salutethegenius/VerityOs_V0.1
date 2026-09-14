@@ -308,18 +308,52 @@ export async function loadPermissions(pool: Pool, roleId: string): Promise<Permi
   return result.rows.map((r) => r.permission_key);
 }
 
-export async function createServiceCredential(
+export function generateServiceToken(): string {
+  return `vsvc_${randomBytes(32).toString("base64url")}`;
+}
+
+export async function createRole(
   pool: Pool,
-  input: { name: string; organizationId: string | null; scopes: string[]; secret: string }
+  input: { organizationId: string; name: string; permissions: PermissionKey[] }
 ): Promise<string> {
   const id = randomUUID();
-  const secretHash = tokenHash(input.secret);
+  await pool.query(`INSERT INTO auth.roles (id, organization_id, name) VALUES ($1, $2, $3)`, [
+    id,
+    input.organizationId,
+    input.name,
+  ]);
+  for (const key of input.permissions) {
+    await pool.query(
+      `INSERT INTO auth.role_permissions (role_id, permission_key) VALUES ($1, $2)`,
+      [id, key]
+    );
+  }
+  return id;
+}
+
+export async function createServiceCredential(
+  pool: Pool,
+  input: { name: string; organizationId: string | null; scopes: string[] }
+): Promise<{ id: string; token: string }> {
+  const id = randomUUID();
+  const token = generateServiceToken();
   await pool.query(
     `INSERT INTO auth.service_credentials (id, name, organization_id, secret_hash, scopes)
      VALUES ($1, $2, $3, $4, $5)`,
-    [id, input.name, input.organizationId, secretHash, input.scopes]
+    [id, input.name, input.organizationId, tokenHash(token), input.scopes]
   );
-  return id;
+  return { id, token };
+}
+
+export async function revokeServiceCredential(pool: Pool, id: string): Promise<void> {
+  const result = await pool.query(
+    `UPDATE auth.service_credentials SET revoked_at = now()
+     WHERE id = $1 AND revoked_at IS NULL`,
+    [id]
+  );
+  if (result.rowCount !== 1) {
+    throw new AuthError("NOT_FOUND", "service credential not found", 404);
+  }
 }
 
 export async function resolveServiceToken(

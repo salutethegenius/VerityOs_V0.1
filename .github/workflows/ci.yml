@@ -24,6 +24,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://verityos:verityos@localhost:5432/verityos_audit
+      VERITY_EMBEDDING_PROVIDER: mock
+      VERITY_DATA_DIR: /tmp/verity-data
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

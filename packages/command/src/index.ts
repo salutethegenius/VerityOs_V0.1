@@ -167,8 +167,9 @@ export async function seedDefaultCommand(
     );
     for (const roleId of skill.roles) {
       await pool.query(
-        `INSERT INTO command.skill_policy_roles (skill_policy_id, role_id) VALUES ($1, $2)`,
-        [skillPolicyId, roleId]
+        `INSERT INTO command.skill_policy_roles (skill_policy_id, role_id, organization_id)
+         VALUES ($1, $2, $3)`,
+        [skillPolicyId, roleId, input.organizationId]
       );
     }
   }

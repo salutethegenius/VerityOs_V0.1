@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import pg from "pg";
 import { createServiceCredential } from "@verityos/identity";
@@ -7,6 +7,8 @@ import { buildServer } from "../src/server.js";
 export const TEST_DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgres://verityos:verityos@127.0.0.1:5432/verityos_audit";
+
+export const TEST_ORIGIN = process.env.CORS_ORIGIN ?? "http://127.0.0.1:3000";
 
 export function createPool(): pg.Pool {
   return new pg.Pool({ connectionString: TEST_DATABASE_URL, max: 10 });
@@ -27,15 +29,20 @@ export function sessionCookie(response: { headers: Record<string, unknown> }): s
   return String(match).split(";")[0];
 }
 
+export function sessionHeaders(
+  cookie: string,
+  extra: Record<string, string> = {}
+): Record<string, string> {
+  return { cookie, origin: TEST_ORIGIN, ...extra };
+}
+
 export async function seedPlatformService(pool: pg.Pool): Promise<string> {
-  const secret = randomBytes(32).toString("hex");
-  await createServiceCredential(pool, {
+  const created = await createServiceCredential(pool, {
     name: `platform-${randomUUID()}`,
     organizationId: null,
     scopes: ["organization.manage", "knowledge.read", "models.read"],
-    secret,
   });
-  return secret;
+  return created.token;
 }
 
 export async function createOrg(
@@ -72,6 +79,7 @@ export async function login(app: FastifyInstance, email: string, password: strin
   const response = await app.inject({
     method: "POST",
     url: "/v1/auth/login",
+    headers: { origin: TEST_ORIGIN },
     payload: { email, password },
   });
   if (response.statusCode !== 200) {
@@ -96,4 +104,28 @@ export function markdownPart(filename: string, body: string, title: string): Buf
     "",
   ].join("\r\n");
   return Buffer.from(payload);
+}
+
+export function filePart(
+  filename: string,
+  body: Buffer,
+  title: string,
+  contentType: string
+): Buffer {
+  const boundary = "----veritytest";
+  const header = Buffer.from(
+    [
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="title"`,
+      "",
+      title,
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="file"; filename="${filename}"`,
+      `Content-Type: ${contentType}`,
+      "",
+      "",
+    ].join("\r\n")
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return Buffer.concat([header, body, footer]);
 }

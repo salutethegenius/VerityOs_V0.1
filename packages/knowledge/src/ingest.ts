@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { DataClassification } from "@verityos/contracts";
+import { KnowledgeError } from "./errors.js";
 import { extractText } from "./extract.js";
-import { chunkText, embedText, sha256Bytes, sha256Text, vectorLiteral } from "./hashing.js";
+import { chunkText, sha256Bytes, vectorLiteral } from "./hashing.js";
 import {
   PARSER_VERSION,
   assertUpload,
   sniffMime,
   writeBlob,
 } from "./storage.js";
+import {
+  embeddingProviderFromEnv,
+  type EmbeddingProvider,
+} from "./embed.js";
 
 export async function createCollection(
   pool: Pool,
@@ -58,7 +63,7 @@ export async function uploadSourceVersion(
     [input.collectionId]
   );
   if (!collection.rows[0] || collection.rows[0].organization_id !== input.organizationId) {
-    throw new Error("collection not found");
+    throw new KnowledgeError("NOT_FOUND", "collection not found", 404);
   }
 
   const sourceId = input.sourceId ?? randomUUID();
@@ -75,10 +80,10 @@ export async function uploadSourceVersion(
     } else {
       const existing = await client.query<{ organization_id: string }>(
         `SELECT organization_id FROM knowledge.sources WHERE id = $1`,
-        [sourceId]
+        [input.sourceId]
       );
       if (!existing.rows[0] || existing.rows[0].organization_id !== input.organizationId) {
-        throw new Error("source not found");
+        throw new KnowledgeError("NOT_FOUND", "source not found", 404);
       }
     }
     const last = await client.query<{ version_number: number }>(
@@ -128,13 +133,14 @@ export async function approveSourceVersion(
     [input.versionId, input.organizationId, input.actorId]
   );
   if (result.rowCount !== 1) {
-    throw new Error("version not found or already approved");
+    throw new KnowledgeError("NOT_FOUND", "version not found or already approved", 404);
   }
 }
 
 export async function indexSourceVersion(
   pool: Pool,
-  input: { organizationId: string; versionId: string }
+  input: { organizationId: string; versionId: string },
+  provider: EmbeddingProvider = embeddingProviderFromEnv()
 ): Promise<{ chunkCount: number }> {
   const version = await pool.query<{
     id: string;
@@ -149,7 +155,7 @@ export async function indexSourceVersion(
   );
   const row = version.rows[0];
   if (!row || row.organization_id !== input.organizationId) {
-    throw new Error("version not found");
+    throw new KnowledgeError("NOT_FOUND", "version not found", 404);
   }
   const existing = await pool.query(
     `SELECT 1 FROM knowledge.chunks WHERE source_version_id = $1 LIMIT 1`,
@@ -166,20 +172,23 @@ export async function indexSourceVersion(
   const { readBlob } = await import("./storage.js");
   const bytes = await readBlob(row.blob_uri);
   if (sha256Bytes(bytes) !== row.content_hash) {
-    throw new Error("blob content hash mismatch");
+    throw new KnowledgeError("BLOB_HASH_MISMATCH", "blob content hash mismatch", 500);
   }
   const text = await extractText(row.mime_type, bytes);
   const chunks = chunkText(text);
+  const embeddings = await provider.embed(chunks.map((chunk) => chunk.text));
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    for (const chunk of chunks) {
-      const embedding = embedText(chunk.text);
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+      const embedding = embeddings[i];
       await client.query(
         `INSERT INTO knowledge.chunks (
            id, organization_id, source_version_id, chunk_index, page_number, section,
-           text, text_hash, token_count, embedding, metadata
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::vector,$11::jsonb)`,
+           text, text_hash, token_count, embedding, metadata,
+           embedding_provider_key, embedding_dimensions
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::vector,$11::jsonb,$12,$13)`,
         [
           randomUUID(),
           input.organizationId,
@@ -191,7 +200,13 @@ export async function indexSourceVersion(
           chunk.textHash,
           chunk.tokenCount,
           vectorLiteral(embedding),
-          JSON.stringify({ parser_version: PARSER_VERSION, content_hash: row.content_hash }),
+          JSON.stringify({
+            parser_version: PARSER_VERSION,
+            content_hash: row.content_hash,
+            embedding_provider_key: provider.key,
+          }),
+          provider.key,
+          provider.dimensions,
         ]
       );
     }
@@ -204,5 +219,3 @@ export async function indexSourceVersion(
   }
   return { chunkCount: chunks.length };
 }
-
-export { sha256Text };

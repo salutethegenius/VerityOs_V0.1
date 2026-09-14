@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chunkText, embedText, reciprocalRankFusion, sha256Text } from "../src/hashing.js";
-import { extractText, stripHtml } from "../src/extract.js";
+import { MockEmbeddingProvider, PRODUCTION_EMBEDDING_DIMENSIONS } from "../src/embed.js";
 
 describe("knowledge hashing and chunking", () => {
   it("hashes file bytes deterministically", () => {
@@ -16,11 +16,16 @@ describe("knowledge hashing and chunking", () => {
     expect(chunkText(text)[0].textHash).toBe(sha256Text(chunkText(text)[0].text));
   });
 
-  it("builds a deterministic embedding and RRF merge", () => {
-    const a = embedText("capital of France Paris");
-    const b = embedText("capital of France Paris");
+  it("builds a deterministic mock embedding at the production dimension", async () => {
+    const provider = new MockEmbeddingProvider();
+    expect(provider.key).toBe("mock");
+    expect(provider.dimensions).toBe(PRODUCTION_EMBEDDING_DIMENSIONS);
+    expect(PRODUCTION_EMBEDDING_DIMENSIONS).toBe(768);
+    const [a] = await provider.embed(["capital of France Paris"]);
+    const [b] = await provider.embed(["capital of France Paris"]);
     expect(a).toEqual(b);
-    expect(a).toHaveLength(64);
+    expect(a).toHaveLength(768);
+    expect(embedText("capital of France Paris")).toHaveLength(768);
     const fused = reciprocalRankFusion([
       [
         { id: "c1", rank: 1 },
@@ -32,11 +37,5 @@ describe("knowledge hashing and chunking", () => {
       ],
     ]);
     expect(fused.get("c1")).toBeCloseTo(fused.get("c2") ?? 0);
-  });
-
-  it("extracts html, markdown, and text", async () => {
-    expect(stripHtml("<p>Hello <b>world</b></p>")).toBe("Hello world");
-    expect(await extractText("text/plain", Buffer.from("plain"))).toBe("plain");
-    expect(await extractText("text/markdown", Buffer.from("# Title"))).toBe("# Title");
   });
 });
