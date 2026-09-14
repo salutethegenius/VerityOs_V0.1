@@ -1,0 +1,18 @@
+{
+  "signing_secret": "fixture_slack_signing_secret_not_real",
+  "replay_tolerance_seconds": 300,
+  "algorithm": "HMAC-SHA256",
+  "base_format": "v0:{timestamp}:{body}",
+  "signature_prefix": "v0=",
+  "valid_example": {
+    "timestamp": "1770000000",
+    "body": "{\"type\":\"block_actions\",\"actions\":[{\"action_id\":\"approve_item_1\"}]}",
+    "note": "Tests must compute expected HMAC at runtime. Do not treat a stale signature as valid."
+  },
+  "rules": [
+    "Reject missing timestamp, signature, or signing secret.",
+    "Reject timestamps older than 5 minutes (replay protection).",
+    "Use hmac.compare_digest.",
+    "Every Slack button action_id in a message must be unique."
+  ]
+}

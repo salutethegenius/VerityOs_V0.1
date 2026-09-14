@@ -1,0 +1,26 @@
+{
+  "brand_id": "fixture_credit_union",
+  "display_name": "Fixture Credit Union",
+  "active": true,
+  "platforms": ["facebook", "instagram"],
+  "posting_cadence_days": 3,
+  "image_style_prompt": "navy and white, community-forward, clean",
+  "meta_page_id": "0",
+  "meta_token_env": "META_FIXTURE_PAGE_ACCESS_TOKEN",
+  "content_pillars": [
+    {
+      "name": "Financial education",
+      "description": "Plain-language explainers about saving and credit."
+    },
+    {
+      "name": "Community",
+      "description": "Local events and member stories. No invented rates."
+    }
+  ],
+  "footer": {
+    "website": "example.invalid",
+    "phone": "+1-555-0100",
+    "tagline": "Members first",
+    "hashtag": "#FixtureCU"
+  }
+}

@@ -1,0 +1,6 @@
+packages:
+  - "apps/core-api"
+  - "apps/shell"
+  - "packages/audit-kernel"
+  - "packages/contracts"
+  - "packages/sdk-ts"

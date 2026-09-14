@@ -1,0 +1,15 @@
+{
+  "name": "@verityos/core-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "start": "node -e \"console.log('core-api is a Phase 0-2 stub')\"",
+    "test": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "fastify": "^4.28.0"
+  }
+}

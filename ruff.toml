@@ -1,0 +1,2 @@
+# Ruff is invoked from CI against the Python packages.
+# No additional project-wide config required for Phase 0-2 stubs.

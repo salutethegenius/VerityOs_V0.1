@@ -1,0 +1,31 @@
+{
+  "status_machine": [
+    "pending_approval",
+    "approved",
+    "rejected",
+    "publishing",
+    "scheduling",
+    "posted",
+    "needs_review",
+    "error"
+  ],
+  "examples": [
+    {
+      "id": 1,
+      "brand": "fixture_credit_union",
+      "platform": "facebook",
+      "draft_text": "Member education draft. No rates invented.",
+      "status": "pending_approval",
+      "slack_message_ts": "0000000000.000000"
+    },
+    {
+      "id": 2,
+      "brand": "fixture_credit_union",
+      "platform": "facebook",
+      "draft_text": "Approved fixture draft.",
+      "status": "approved",
+      "claimed_at": null,
+      "meta_post_id": null
+    }
+  ]
+}
