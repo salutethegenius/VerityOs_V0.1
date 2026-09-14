@@ -5,6 +5,7 @@ import { openExecution, getExecution } from "../src/execution/executions.js";
 import { verifyEvidenceBundle } from "../src/verify/verify.js";
 import { exportOrganizationEvidence } from "../src/export/bundle.js";
 import { createPool } from "./helpers/db.js";
+import { contentHash } from "./helpers/evidence.js";
 
 const pool = createPool();
 
@@ -27,7 +28,7 @@ describe("V2 checkpoints", () => {
       organizationId,
       executionId: execution.id,
       entryType: "request_opened",
-      requestHash: "artifact-draft",
+      requestHash: contentHash("artifact-draft"),
       responseHash: null,
       executionGraphHash: null,
     });
@@ -38,7 +39,7 @@ describe("V2 checkpoints", () => {
       organizationId,
       executionId: execution.id,
       entryType: "approval_requested",
-      requestHash: "artifact-draft",
+      requestHash: contentHash("artifact-draft"),
       responseHash: null,
       executionGraphHash: null,
     });
@@ -49,9 +50,9 @@ describe("V2 checkpoints", () => {
       organizationId,
       executionId: execution.id,
       entryType: "final",
-      requestHash: "artifact-draft",
-      responseHash: "published",
-      executionGraphHash: "graph",
+      requestHash: contentHash("artifact-draft"),
+      responseHash: contentHash("published"),
+      executionGraphHash: contentHash("graph"),
     });
     expect(finalized.previous_entry_hash).toBe(approval.entry_hash);
     expect(finalized.organization_sequence).toBe(3);
@@ -72,7 +73,7 @@ describe("V2 checkpoints", () => {
         organizationId,
         executionId: execution.id,
         entryType: i === 3 ? "final" : "request_opened",
-        requestHash: `h-${i}`,
+        requestHash: contentHash(`h-${i}`),
         responseHash: null,
         executionGraphHash: null,
         merkleSnapshotInterval: 4,

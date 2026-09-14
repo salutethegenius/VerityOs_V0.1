@@ -9,6 +9,7 @@ import { exportOrganizationEvidence, serializeEvidenceBundle } from "../src/expo
 import { verifyEvidenceBundle, verifyExportFile } from "../src/verify/verify.js";
 import { computeEntryHash, buildHashPayload } from "../src/hashing/hash.js";
 import { createPool } from "./helpers/db.js";
+import { contentHash } from "./helpers/evidence.js";
 import * as v1 from "../src/v1/verify-export.js";
 import { computeEntryHash as v1ComputeEntryHash } from "../src/v1/ledger/hash.js";
 
@@ -33,7 +34,7 @@ async function seededChain() {
     organizationId,
     executionId: execution.id,
     entryType: "request_opened",
-    requestHash: "req-1",
+    requestHash: contentHash("req-1"),
     responseHash: null,
     executionGraphHash: null,
     merkleSnapshotInterval: 4,
@@ -42,7 +43,7 @@ async function seededChain() {
     organizationId,
     executionId: execution.id,
     entryType: "approval_requested",
-    requestHash: "req-1",
+    requestHash: contentHash("req-1"),
     responseHash: null,
     executionGraphHash: null,
     merkleSnapshotInterval: 4,
@@ -51,18 +52,18 @@ async function seededChain() {
     organizationId,
     executionId: execution.id,
     entryType: "action_completed",
-    requestHash: "req-1",
-    responseHash: "res-1",
-    executionGraphHash: "graph-1",
+    requestHash: contentHash("req-1"),
+    responseHash: contentHash("res-1"),
+    executionGraphHash: contentHash("graph-1"),
     merkleSnapshotInterval: 4,
   });
   await appendLedgerEntry(pool, {
     organizationId,
     executionId: execution.id,
     entryType: "final",
-    requestHash: "req-1",
-    responseHash: "res-1",
-    executionGraphHash: "graph-1",
+    requestHash: contentHash("req-1"),
+    responseHash: contentHash("res-1"),
+    executionGraphHash: contentHash("graph-1"),
     merkleSnapshotInterval: 4,
   });
   return { organizationId, execution };
@@ -160,9 +161,9 @@ describe("V2 verification (converted V1 expected failures)", () => {
         organizationId,
         executionId: execution.id,
         entryType: i === 3 ? "final" : "request_opened",
-        requestHash: `req-${i}`,
-        responseHash: i === 3 ? "res" : null,
-        executionGraphHash: i === 3 ? "graph" : null,
+        requestHash: contentHash(`req-${i}`),
+        responseHash: i === 3 ? contentHash("res") : null,
+        executionGraphHash: i === 3 ? contentHash("graph") : null,
         merkleSnapshotInterval: 4,
       });
     }
@@ -210,7 +211,7 @@ describe("V2 verification (converted V1 expected failures)", () => {
       organizationId,
       executionId: execution.id,
       entryType: "request_opened",
-      requestHash: "req",
+      requestHash: contentHash("req"),
       responseHash: null,
       executionGraphHash: null,
       createdAtCanonical: canonical,
@@ -222,7 +223,7 @@ describe("V2 verification (converted V1 expected failures)", () => {
         ledgerSequence: 1,
         executionId: execution.id,
         entryType: "request_opened",
-        requestHash: "req",
+        requestHash: contentHash("req"),
         responseHash: null,
         executionGraphHash: null,
         previousEntryHash: null,

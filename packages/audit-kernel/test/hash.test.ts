@@ -4,6 +4,7 @@ import {
   buildHashPayload,
   computeEntryHash,
   hashContent,
+  sha256Hex,
 } from "../src/hashing/hash.js";
 import * as v1 from "../src/v1/ledger/hash.js";
 
@@ -45,21 +46,22 @@ describe("V1 hash characterization", () => {
 });
 
 describe("V2 canonical hashing", () => {
+  const requestHash = sha256Hex("aa");
   const payload = buildHashPayload({
     organizationId: "22222222-2222-2222-2222-222222222222",
     ledgerSequence: 1,
     executionId: "33333333-3333-3333-3333-333333333333",
     entryType: "request_opened",
-    requestHash: "aa",
+    requestHash,
     responseHash: null,
     executionGraphHash: null,
     previousEntryHash: null,
     createdAtCanonical: "2026-09-14T20:00:00.000Z",
   });
 
-  it("emits RFC 8785 key order and JSON null for missing hashes", () => {
+  it("emits VCHF-2 key order and JSON null for missing hashes", () => {
     const json = canonicalize(payload);
-    expect(json).toContain('"request_hash":"aa"');
+    expect(json).toContain(`"request_hash":"${requestHash}"`);
     expect(json).toContain('"response_hash":null');
     expect(json).toContain('"execution_graph_hash":null');
     expect(json).toContain('"previous_entry_hash":null');
@@ -121,9 +123,9 @@ describe("V2 canonical hashing", () => {
         ledgerSequence: 1,
         executionId: payload.execution_id,
         entryType: "final",
-        requestHash: "aa",
-        responseHash: "bb",
-        executionGraphHash: "cc",
+        requestHash: sha256Hex("aa"),
+        responseHash: sha256Hex("bb"),
+        executionGraphHash: sha256Hex("cc"),
         previousEntryHash: null,
         createdAtCanonical: canonical,
       })
@@ -135,9 +137,9 @@ describe("V2 canonical hashing", () => {
       ledgerSequence: 1,
       executionId: payload.execution_id,
       entryType: "final",
-      requestHash: "aa",
-      responseHash: "bb",
-      executionGraphHash: "cc",
+      requestHash: sha256Hex("aa"),
+      responseHash: sha256Hex("bb"),
+      executionGraphHash: sha256Hex("cc"),
       previousEntryHash: null,
       createdAtCanonical: canonical,
     });

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appendLedgerEntry } from "../src/ledger/append.js";
 import { openExecution } from "../src/execution/executions.js";
 import { createPool } from "./helpers/db.js";
+import { contentHash } from "./helpers/evidence.js";
 
 const pool = createPool();
 
@@ -33,7 +34,7 @@ describe("audit V2 migrations", () => {
       organizationId,
       executionId: execution.id,
       entryType: "request_opened",
-      requestHash: "mig",
+      requestHash: contentHash("mig"),
       responseHash: null,
       executionGraphHash: null,
     });
@@ -55,7 +56,7 @@ describe("audit V2 migrations", () => {
         organizationId,
         executionId: execution.id,
         entryType: i === 1 ? "final" : "request_opened",
-        requestHash: `mig-${i}`,
+        requestHash: contentHash(`mig-${i}`),
         responseHash: null,
         executionGraphHash: null,
         merkleSnapshotInterval: 2,

@@ -5,6 +5,7 @@ import { appendLedgerEntry } from "../src/ledger/append.js";
 import { openExecution } from "../src/execution/executions.js";
 import { getLedgerEntries } from "../src/ledger/append.js";
 import { createPool, ensureV1LedgerTable, truncateV1 } from "./helpers/db.js";
+import { contentHash } from "./helpers/evidence.js";
 
 const pool = createPool();
 
@@ -75,7 +76,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId,
         executionId: execA.id,
         entryType: "request_opened",
-        requestHash: "a",
+        requestHash: contentHash("a"),
         responseHash: null,
         executionGraphHash: null,
       }),
@@ -83,7 +84,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId,
         executionId: execB.id,
         entryType: "request_opened",
-        requestHash: "b",
+        requestHash: contentHash("b"),
         responseHash: null,
         executionGraphHash: null,
       }),
@@ -104,7 +105,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
       organizationId,
       executionId: firstExec.id,
       entryType: "request_opened",
-      requestHash: "seed",
+      requestHash: contentHash("seed"),
       responseHash: null,
       executionGraphHash: null,
     });
@@ -116,7 +117,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId,
         executionId: execA.id,
         entryType: "request_opened",
-        requestHash: "c",
+        requestHash: contentHash("c"),
         responseHash: null,
         executionGraphHash: null,
       }),
@@ -124,7 +125,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId,
         executionId: execB.id,
         entryType: "request_opened",
-        requestHash: "d",
+        requestHash: contentHash("d"),
         responseHash: null,
         executionGraphHash: null,
       }),
@@ -147,7 +148,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId: orgA,
         executionId: execA.id,
         entryType: "request_opened",
-        requestHash: "org-a",
+        requestHash: contentHash("org-a"),
         responseHash: null,
         executionGraphHash: null,
       }),
@@ -155,7 +156,7 @@ describe("V2 transactional append (converted V1 expected failures)", () => {
         organizationId: orgB,
         executionId: execB.id,
         entryType: "request_opened",
-        requestHash: "org-b",
+        requestHash: contentHash("org-b"),
         responseHash: null,
         executionGraphHash: null,
       }),

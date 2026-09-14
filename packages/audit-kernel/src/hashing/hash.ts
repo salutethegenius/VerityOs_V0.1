@@ -15,8 +15,9 @@ export function hashContent(content: string): string {
 }
 
 /**
- * UTC RFC 3339 timestamp with millisecond precision and Z suffix.
- * Callers must persist this exact string as created_at_canonical.
+ * UTC RFC 3339 timestamp with millisecond precision and Z suffix
+ * (`Date#toISOString`). Callers must persist this exact string as
+ * created_at_canonical. This is the Hash Format V2 timestamp representation.
  */
 export function canonicalTimestampNow(): string {
   return new Date().toISOString();

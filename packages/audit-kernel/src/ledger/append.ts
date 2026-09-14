@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { Pool, PoolClient } from "pg";
+import pg, { type Pool, type PoolClient } from "pg";
 import type { LedgerEntryType } from "@verityos/contracts";
 import {
   HASH_FORMAT_VERSION,
@@ -8,6 +8,11 @@ import {
   canonicalTimestampNow,
   computeEntryHash,
 } from "../hashing/hash.js";
+import {
+  assertCanonicalUtcTimestamp,
+  assertLedgerHashFields,
+  assertSha256Hex,
+} from "../hashing/evidence.js";
 import { computeMerkleRoot, getMerkleProof } from "../merkle/merkle.js";
 import type { LedgerEntryRow, MerkleCheckpointRow } from "../types.js";
 import { setExecutionStatus } from "../execution/executions.js";
@@ -29,35 +34,50 @@ export interface AppendLedgerInput {
   kernelVersion?: string;
 }
 
-function isPool(db: Pool | PoolClient): db is Pool {
-  return typeof (db as Pool).totalCount === "number";
+function assertIsPool(db: unknown): asserts db is Pool {
+  if (!(db instanceof pg.Pool)) {
+    throw new Error(
+      "appendLedgerEntry requires a Pool and always opens its own transaction. Use appendLedgerEntryInTransaction(client, ...) if you are already inside a transaction."
+    );
+  }
 }
 
+/**
+ * Append a ledger entry. Always opens BEGIN/COMMIT/ROLLBACK on a Pool.
+ * A PoolClient is rejected at runtime — callers already inside a transaction
+ * must use appendLedgerEntryInTransaction.
+ */
 export async function appendLedgerEntry(
-  db: Pool | PoolClient,
+  pool: Pool,
   input: AppendLedgerInput
 ): Promise<LedgerEntryRow> {
-  if (isPool(db)) {
-    const client = await db.connect();
-    try {
-      await client.query("BEGIN");
-      const row = await appendLedgerEntryInTransaction(client, input);
-      await client.query("COMMIT");
-      return row;
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+  assertIsPool(pool);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await appendLedgerEntryInTransaction(client, input);
+    await client.query("COMMIT");
+    return row;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  return appendLedgerEntryInTransaction(db, input);
 }
 
+/**
+ * Append a ledger entry using a client that is already inside an explicit
+ * transaction. Does not open or close BEGIN/COMMIT/ROLLBACK.
+ */
 export async function appendLedgerEntryInTransaction(
   client: PoolClient,
   input: AppendLedgerInput
 ): Promise<LedgerEntryRow> {
+  assertLedgerHashFields(input);
+  const createdAtCanonical = input.createdAtCanonical ?? canonicalTimestampNow();
+  assertCanonicalUtcTimestamp("created_at_canonical", createdAtCanonical);
+
   await client.query(
     `INSERT INTO audit.chain_state (organization_id, latest_sequence, latest_entry_hash, updated_at)
      VALUES ($1, 0, NULL, now())
@@ -83,7 +103,7 @@ export async function appendLedgerEntryInTransaction(
 
   const nextSequence = locked.latest_sequence + 1;
   const previousEntryHash = locked.latest_entry_hash;
-  const createdAtCanonical = input.createdAtCanonical ?? canonicalTimestampNow();
+  assertSha256Hex("previous_entry_hash", previousEntryHash);
   const kernelVersion = input.kernelVersion ?? KERNEL_VERSION;
 
   const payload = buildHashPayload({
@@ -99,6 +119,7 @@ export async function appendLedgerEntryInTransaction(
     createdAtCanonical,
   });
   const entryHash = computeEntryHash(payload);
+  assertSha256Hex("entry_hash", entryHash);
   const id = randomUUID();
 
   const interval = input.merkleSnapshotInterval ?? DEFAULT_MERKLE_INTERVAL;
@@ -119,6 +140,7 @@ export async function appendLedgerEntryInTransaction(
     );
     checkpointLeaves = [...prior.rows.map((r) => r.entry_hash), entryHash];
     merkleRoot = computeMerkleRoot(checkpointLeaves);
+    assertSha256Hex("merkle_root", merkleRoot);
   }
 
   const inserted = await client.query<LedgerEntryRow>(

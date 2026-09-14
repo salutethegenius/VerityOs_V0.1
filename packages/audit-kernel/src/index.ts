@@ -11,6 +11,15 @@ export {
   type HashFieldInput,
 } from "./hashing/hash.js";
 export {
+  SHA256_HEX_PATTERN,
+  CANONICAL_UTC_TIMESTAMP_PATTERN,
+  InvalidEvidenceInputError,
+  isSha256Hex,
+  assertSha256Hex,
+  assertCanonicalUtcTimestamp,
+  assertLedgerHashFields,
+} from "./hashing/evidence.js";
+export {
   hashPair,
   buildMerkleTree,
   computeMerkleRoot,

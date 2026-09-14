@@ -18,7 +18,9 @@ V2 lives in `packages/audit-kernel`. V1 sources are kept under `src/v1` for char
 
 ### Hashing
 
-`entry_hash = SHA256(RFC8785(payload))`.
+`entry_hash = SHA256(VCHF-2(payload))`.
+
+VCHF-2 (Verity Canonical Hash Format V2) is a restricted RFC 8785 / JCS domain, not a complete general-purpose RFC 8785 implementation. Non-integer numbers are rejected. See [hash-format-v2.md](hash-format-v2.md). This format is frozen; do not change it without incrementing `hash_format_version`.
 
 Payload keys are always present:
 
@@ -43,6 +45,10 @@ Unavailable hashes are JSON `null`. Empty strings are not substitutes. Fields ar
 ### Chain scope and append
 
 Each organization has its own chain in `audit.chain_state`.
+
+`appendLedgerEntry(pool, ...)` is the public write API. It accepts a `pg.Pool` only and always owns `BEGIN`/`COMMIT`/`ROLLBACK`. Passing a `PoolClient` is a runtime error. Callers already inside a transaction must use the explicitly named `appendLedgerEntryInTransaction(client, ...)`.
+
+Non-null SHA-256 fields written into a V2 row (`request_hash`, `response_hash`, `execution_graph_hash`, `previous_entry_hash`, `entry_hash`, `merkle_root`) must be lowercase 64-character hex. Invalid evidence and timestamps that are not exact `Date#toISOString` UTC form are rejected before insert.
 
 First-entry concurrency: `SELECT FOR UPDATE` does not lock a missing row. Append does:
 
@@ -83,6 +89,8 @@ The library and `verity-verify` CLI can verify:
 - an exported evidence bundle with no database access
 
 A modified hashed field, swapped sibling, or altered `created_at_canonical` must fail verification.
+
+V0.2 verification of an exported bundle does not prove that the chain is complete against a later head, or that execution metadata (actor, policy, Knowledge, approval, action) has been cryptographically committed. See [threat-model.md](../security/threat-model.md).
 
 ### What the Kernel does not do
 
