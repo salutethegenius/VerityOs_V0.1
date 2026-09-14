@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "cursor/**"]
+  pull_request:
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: verityos
+          POSTGRES_PASSWORD: verityos
+          POSTGRES_DB: verityos_audit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verityos -d verityos_audit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://verityos:verityos@localhost:5432/verityos_audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm db:migrate
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install ruff pytest
+      - run: python -m pip install -e apps/nova -e apps/knowledge -e packages/sdk-python
+      - run: ruff check apps/nova apps/knowledge packages/sdk-python
+      - run: pytest apps/nova apps/knowledge packages/sdk-python
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker build Audit Kernel image
+        run: docker build -f infra/docker/audit-kernel.Dockerfile -t verityos-audit-kernel .
