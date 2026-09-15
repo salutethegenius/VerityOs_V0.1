@@ -7,6 +7,7 @@ import {
 import { computeMerkleRoot, verifyMerkleProof } from "../merkle/merkle.js";
 import type { EvidenceBundle, VerifyIssue, VerifyResult } from "../types.js";
 import {
+  UnresolvedGraphParentError,
   buildExecutionGraphV2,
   computeExecutionGraphHash,
 } from "../execution/graph-v2.js";
@@ -188,11 +189,66 @@ export function verifyExecutionGraphs(bundle: EvidenceBundle): VerifyIssue[] {
   const issues: VerifyIssue[] = [];
   const events = bundle.execution_events ?? [];
   const graphs = bundle.execution_graphs ?? [];
-  if (events.length === 0 && graphs.length === 0) {
-    return issues;
-  }
   const executions = new Map(bundle.executions.map((row) => [row.id, row]));
+  const graphsByExecution = new Map<string, NonNullable<EvidenceBundle["execution_graphs"]>>();
   for (const graphExport of graphs) {
+    const list = graphsByExecution.get(graphExport.execution_id) ?? [];
+    list.push(graphExport);
+    graphsByExecution.set(graphExport.execution_id, list);
+  }
+
+  const graphBearing = bundle.ledger_entries.filter(
+    (entry) =>
+      (entry.entry_type === "final" || entry.entry_type === "failure") &&
+      entry.execution_graph_hash !== null
+  );
+  const checked = new Set<string>();
+
+  for (const entry of graphBearing) {
+    const execution = executions.get(entry.execution_id);
+    if (!execution || execution.organization_id !== bundle.manifest.organization_id) {
+      issues.push({
+        code: "GRAPH_EVIDENCE_MISSING",
+        message: "Matching execution metadata is missing for a graph-bearing ledger entry",
+        sequence: entry.organization_sequence,
+        entry_hash: entry.entry_hash,
+      });
+    }
+    const exported = graphsByExecution.get(entry.execution_id) ?? [];
+    if (exported.length === 0) {
+      issues.push({
+        code: "GRAPH_EVIDENCE_MISSING",
+        message: "Execution Graph V2 export is missing for a graph-bearing ledger entry",
+        sequence: entry.organization_sequence,
+        entry_hash: entry.entry_hash,
+      });
+    } else if (exported.length > 1) {
+      issues.push({
+        code: "GRAPH_DUPLICATE",
+        message: "More than one Execution Graph V2 export exists for the execution",
+        sequence: entry.organization_sequence,
+        entry_hash: entry.entry_hash,
+      });
+    }
+    const related = events.filter((event) => event.execution_id === entry.execution_id);
+    if (related.length === 0) {
+      issues.push({
+        code: "GRAPH_EVENTS_MISSING",
+        message: "Execution events required to reconstruct Graph V2 are missing",
+        sequence: entry.organization_sequence,
+        entry_hash: entry.entry_hash,
+      });
+    }
+    if (exported.length === 1 && related.length > 0 && execution) {
+      issues.push(...compareGraphEvidence(execution, related, exported[0], entry));
+    }
+    checked.add(entry.execution_id);
+  }
+
+  for (const graphExport of graphs) {
+    if (checked.has(graphExport.execution_id)) {
+      continue;
+    }
     const execution = executions.get(graphExport.execution_id);
     if (!execution || execution.organization_id !== bundle.manifest.organization_id) {
       issues.push({
@@ -201,34 +257,67 @@ export function verifyExecutionGraphs(bundle: EvidenceBundle): VerifyIssue[] {
       });
       continue;
     }
-    const related = events
-      .filter((event) => event.execution_id === graphExport.execution_id)
-      .map(
-        (event): ExecutionEventRow => ({
-          id: event.id,
-          organization_id: event.organization_id,
-          execution_id: event.execution_id,
-          event_sequence: event.event_sequence,
-          event_type: event.event_type as ExecutionEventRow["event_type"],
-          status: event.status,
-          parent_event_ids: event.parent_event_ids,
-          input_hash: event.input_hash,
-          output_hash: event.output_hash,
-          metadata: event.metadata,
-          occurred_at: new Date(event.occurred_at_canonical),
-          occurred_at_canonical: event.occurred_at_canonical,
-          created_at: new Date(event.occurred_at_canonical),
-        })
-      );
-    const reconstructed = buildExecutionGraphV2(execution, related);
-    const recomputed = computeExecutionGraphHash(reconstructed);
-    if (recomputed !== graphExport.graph_hash) {
+    const related = events.filter((event) => event.execution_id === graphExport.execution_id);
+    if (related.length === 0) {
       issues.push({
-        code: "GRAPH_HASH_MISMATCH",
-        message: "Recomputed execution_graph_hash does not match the export",
+        code: "GRAPH_EVENTS_MISSING",
+        message: "Execution events required to reconstruct Graph V2 are missing",
       });
+      continue;
     }
-    if (graphExport.graph && typeof graphExport.graph === "object") {
+    issues.push(...compareGraphEvidence(execution, related, graphExport));
+  }
+
+  return issues;
+}
+
+function compareGraphEvidence(
+  execution: EvidenceBundle["executions"][number],
+  related: NonNullable<EvidenceBundle["execution_events"]>,
+  graphExport: NonNullable<EvidenceBundle["execution_graphs"]>[number],
+  ledgerEntry?: EvidenceBundle["ledger_entries"][number]
+): VerifyIssue[] {
+  const issues: VerifyIssue[] = [];
+  const rows: ExecutionEventRow[] = related.map((event) => ({
+    id: event.id,
+    organization_id: event.organization_id,
+    execution_id: event.execution_id,
+    event_sequence: event.event_sequence,
+    event_type: event.event_type as ExecutionEventRow["event_type"],
+    status: event.status,
+    parent_event_ids: event.parent_event_ids,
+    input_hash: event.input_hash,
+    output_hash: event.output_hash,
+    metadata: event.metadata,
+    occurred_at: new Date(event.occurred_at_canonical),
+    occurred_at_canonical: event.occurred_at_canonical,
+    created_at: new Date(event.occurred_at_canonical),
+  }));
+  let reconstructed;
+  try {
+    reconstructed = buildExecutionGraphV2(execution, rows);
+  } catch (err) {
+    if (err instanceof UnresolvedGraphParentError) {
+      issues.push({
+        code: err.code,
+        message: err.message,
+        sequence: ledgerEntry?.organization_sequence,
+        entry_hash: ledgerEntry?.entry_hash,
+      });
+      return issues;
+    }
+    throw err;
+  }
+  const recomputed = computeExecutionGraphHash(reconstructed);
+  if (recomputed !== graphExport.graph_hash) {
+    issues.push({
+      code: "GRAPH_HASH_MISMATCH",
+      message: "Recomputed execution_graph_hash does not match the export",
+      sequence: ledgerEntry?.organization_sequence,
+    });
+  }
+  if (graphExport.graph && typeof graphExport.graph === "object") {
+    try {
       const embeddedHash = computeExecutionGraphHash(
         graphExport.graph as Parameters<typeof computeExecutionGraphHash>[0]
       );
@@ -236,24 +325,29 @@ export function verifyExecutionGraphs(bundle: EvidenceBundle): VerifyIssue[] {
         issues.push({
           code: "GRAPH_EVIDENCE_MISMATCH",
           message: "Embedded Execution Graph V2 does not match reconstructed events",
+          sequence: ledgerEntry?.organization_sequence,
         });
       }
+    } catch (err) {
+      if (err instanceof UnresolvedGraphParentError) {
+        issues.push({
+          code: err.code,
+          message: err.message,
+          sequence: ledgerEntry?.organization_sequence,
+        });
+      } else {
+        throw err;
+      }
     }
-    const finalEntry = bundle.ledger_entries
-      .filter(
-        (entry) =>
-          entry.execution_id === graphExport.execution_id &&
-          (entry.entry_type === "final" || entry.entry_type === "failure")
-      )
-      .sort((a, b) => b.organization_sequence - a.organization_sequence)[0];
-    if (finalEntry?.execution_graph_hash && finalEntry.execution_graph_hash !== recomputed) {
-      issues.push({
-        code: "GRAPH_LEDGER_MISMATCH",
-        message: "Ledger execution_graph_hash does not match reconstructed graph",
-        sequence: finalEntry.organization_sequence,
-        entry_hash: finalEntry.entry_hash,
-      });
-    }
+  }
+  const expectedLedgerHash = ledgerEntry?.execution_graph_hash;
+  if (expectedLedgerHash && expectedLedgerHash !== recomputed) {
+    issues.push({
+      code: "GRAPH_LEDGER_MISMATCH",
+      message: "Ledger execution_graph_hash does not match reconstructed graph",
+      sequence: ledgerEntry.organization_sequence,
+      entry_hash: ledgerEntry.entry_hash,
+    });
   }
   return issues;
 }

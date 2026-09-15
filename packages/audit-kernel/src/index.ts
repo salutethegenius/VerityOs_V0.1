@@ -50,12 +50,15 @@ export {
 } from "./execution/executions.js";
 export {
   appendExecutionEvent,
+  appendExecutionEventInTransaction,
   listExecutionEvents,
+  ExecutionEventError,
   type ExecutionEventRow,
   type AppendExecutionEventInput,
 } from "./execution/events.js";
 export {
   GRAPH_SCHEMA_VERSION,
+  UnresolvedGraphParentError,
   buildExecutionGraphV2,
   computeExecutionGraphHash,
 } from "./execution/graph-v2.js";

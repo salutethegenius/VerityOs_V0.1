@@ -7,6 +7,16 @@ import type { ExecutionEventRow } from "./events.js";
 
 export const GRAPH_SCHEMA_VERSION = EXECUTION_GRAPH_SCHEMA_VERSION;
 
+export class UnresolvedGraphParentError extends Error {
+  readonly code = "GRAPH_PARENT_UNRESOLVED";
+  readonly parentEventIds: string[];
+  constructor(parentEventIds: string[]) {
+    super("Execution Graph V2 contains unresolved parent_event_ids");
+    this.name = "UnresolvedGraphParentError";
+    this.parentEventIds = [...new Set(parentEventIds)];
+  }
+}
+
 export function buildExecutionGraphV2(
   execution: Pick<ExecutionRow, "id" | "verity_record_id" | "organization_id" | "status">,
   events: ExecutionEventRow[]
@@ -23,9 +33,14 @@ export function buildExecutionGraphV2(
     metadata: sortMetadata(event.metadata ?? {}),
   }));
   const byId = new Map(ordered.map((event) => [event.id, event]));
+  const unresolved = ordered.flatMap((event) =>
+    event.parent_event_ids.filter((parentId) => !byId.has(parentId))
+  );
+  if (unresolved.length > 0) {
+    throw new UnresolvedGraphParentError(unresolved);
+  }
   const edges = ordered.flatMap((event) =>
     [...event.parent_event_ids]
-      .filter((parentId) => byId.has(parentId))
       .sort()
       .map((parentId) => ({
         from_event_id: parentId,

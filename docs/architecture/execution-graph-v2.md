@@ -107,7 +107,21 @@ Authenticated organization-scoped Verity Record:
 - `GET /v1/audit/records/:verityRecordId/graph`
 - `POST /v1/audit/records/:verityRecordId/verify`
 
-Record language is `integrity_verified` and `provenance_verified`. Do not claim factual truth.
+Record GET responses use `integrity_status: "not_verified"` and `provenance_status: "linked" | "unlinked" | "absent"`. A graph merely existing is not provenance. `linked` means the reconstructed graph hash matches the final ledger `execution_graph_hash`.
+
+`POST /v1/audit/records/:id/verify` returns `integrity_verified` / `provenance_verified` only after offline bundle verification succeeds. Provenance is verified only when that check passes and the graph is cryptographically linked to the final ledger entry. Do not claim factual truth.
+
+Final/failure ledger rows reuse `request_opened.request_hash`. `response_hash` is the hash of the released response/artifact, or JSON `null`. It is never `SHA256(execution_graph_hash)` and `request_hash` is never `SHA256(execution_id)`.
+
+## Service credentials
+
+Organization-less service credentials are **platform/root** credentials. With `platform.cross_org` they can address executions across organizations. Nova in Phase 8 must use an **organization-scoped** service credential, not a platform credential.
+
+## Event append API
+
+`appendExecutionEvent(pool, ...)` accepts a `pg.Pool` only and owns BEGIN/COMMIT/ROLLBACK. Callers already inside a transaction must use `appendExecutionEventInTransaction(client, ...)`.
+
+Parent `parent_event_ids` must exist in the same organization and execution, with a lower `event_sequence`. Duplicates are normalized by unique sort. Graph reconstruction does not silently drop unresolved parents.
 
 Knowledge retrieve inside an execution loads organization and actor from the execution. `knowledge.retrieval_runs.execution_id` equals the unified execution ID. `included_in_context` stays false until Core constructs the governed model prompt from verified `returned_to_caller` chunks of the supplied `retrieval_run_id`.
 

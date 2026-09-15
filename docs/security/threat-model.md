@@ -43,4 +43,8 @@ When Execution Graph V2 events are present, verification also reconstructs the g
 
 V0.2 does **not** prove freshness or completeness against rollback or truncation. The organization chain head is not externally signed or anchored. An exporter who omits suffix entries, or a database restored to an earlier chain_state, can produce a bundle that still verifies internally. Signing and external anchoring are out of scope for this pass.
 
-Integrity language is `integrity_verified` / `provenance_verified`. Offline verification does not claim factual truth.
+Integrity language: GET record returns `integrity_status: "not_verified"` and `provenance_status: "linked" | "unlinked" | "absent"`. `POST /verify` returns `integrity_verified` / `provenance_verified` only after the ledger chain and Graph V2 evidence verify. Offline verification does not claim factual truth.
+
+## Platform service credentials
+
+Organization-less service credentials are platform/root credentials. They may perform cross-organization execution access when they hold `platform.cross_org`. This is intentional bootstrap authority, not tenant isolation. Phase 8 Nova must authenticate with an organization-scoped service credential.

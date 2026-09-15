@@ -28,6 +28,7 @@ import {
   resolveServiceToken,
   resolveSession,
   selectOrganization,
+  PLATFORM_CROSS_ORG_SCOPE,
   type AuthContext,
   type ServiceContext,
 } from "@verityos/identity";
@@ -840,6 +841,13 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   });
 
   async function requireScopedExecution(service: ServiceContext, executionId: string) {
+    if (!service.organizationId && !service.scopes.includes(PLATFORM_CROSS_ORG_SCOPE)) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "platform credentials require platform.cross_org to access executions across organizations"
+      );
+    }
     if (service.organizationId) {
       const execution = await getExecution(pool, service.organizationId, executionId);
       if (!execution) {
@@ -1000,10 +1008,14 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const record = await getVerityRecord(pool, auth.organizationId, verityRecordId);
     const bundle = await exportOrganizationEvidence(pool, auth.organizationId);
     const verification = verifyEvidenceBundle(bundle);
+    const provenanceVerified =
+      verification.valid && record.provenance_status === "linked";
     return {
       verity_record_id: verityRecordId,
-      integrity_verified: record.integrity_verified && verification.valid,
-      provenance_verified: record.provenance_verified,
+      integrity_verified: verification.valid,
+      provenance_verified: provenanceVerified,
+      integrity_status: verification.valid ? "verified" : "failed",
+      provenance_status: provenanceVerified ? "verified" : record.provenance_status,
       issues: verification.issues,
     };
   });

@@ -1,10 +1,9 @@
 import type { Pool, PoolClient } from "pg";
 import type { ExecutionStatus, LedgerEntryType } from "@verityos/contracts";
 import type { ExecutionGraphV2 } from "@verityos/contracts";
-import { sha256Hex } from "../hashing/hash.js";
 import { appendLedgerEntryInTransaction } from "../ledger/append.js";
 import {
-  appendExecutionEvent,
+  appendExecutionEventInTransaction,
   listExecutionEvents,
   type AppendExecutionEventInput,
 } from "./events.js";
@@ -17,8 +16,8 @@ export interface SealExecutionInput {
   executionId: string;
   entryType: Extract<LedgerEntryType, "final" | "failure">;
   executionStatus: Extract<ExecutionStatus, "completed" | "failed" | "blocked" | "cancelled">;
-  requestHash: string | null;
-  responseHash: string | null;
+  requestHash?: string | null;
+  responseHash?: string | null;
   parentEventIds?: string[];
   preludeEvents?: Array<Omit<AppendExecutionEventInput, "organizationId" | "executionId">>;
 }
@@ -33,6 +32,24 @@ export interface SealExecutionHooks {
   beforeCommit?: () => Promise<void>;
 }
 
+async function loadRequestOpenedHash(
+  client: PoolClient,
+  organizationId: string,
+  executionId: string
+): Promise<string | null> {
+  const result = await client.query<{ request_hash: string | null }>(
+    `SELECT request_hash
+     FROM audit.ledger_entries
+     WHERE organization_id = $1
+       AND execution_id = $2
+       AND entry_type = 'request_opened'
+     ORDER BY organization_sequence ASC
+     LIMIT 1`,
+    [organizationId, executionId]
+  );
+  return result.rows[0]?.request_hash ?? null;
+}
+
 export async function sealExecutionInTransaction(
   client: PoolClient,
   input: SealExecutionInput
@@ -44,7 +61,7 @@ export async function sealExecutionInTransaction(
 
   let parentEventIds = [...(input.parentEventIds ?? [])];
   for (const prelude of input.preludeEvents ?? []) {
-    const recorded = await appendExecutionEvent(client, {
+    const recorded = await appendExecutionEventInTransaction(client, {
       ...prelude,
       organizationId: input.organizationId,
       executionId: input.executionId,
@@ -62,7 +79,7 @@ export async function sealExecutionInTransaction(
     events
   );
   const preSealHash = computeExecutionGraphHash(preSealGraph);
-  const sealed = await appendExecutionEvent(client, {
+  const sealed = await appendExecutionEventInTransaction(client, {
     organizationId: input.organizationId,
     executionId: input.executionId,
     eventType: "audit.checkpoint.sealed",
@@ -79,12 +96,17 @@ export async function sealExecutionInTransaction(
     [...events, sealed]
   );
   const sealedHash = computeExecutionGraphHash(sealedGraph);
+  const requestHash = await loadRequestOpenedHash(
+    client,
+    input.organizationId,
+    input.executionId
+  );
   const entry = await appendLedgerEntryInTransaction(client, {
     organizationId: input.organizationId,
     executionId: input.executionId,
     entryType: input.entryType,
-    requestHash: input.requestHash,
-    responseHash: input.responseHash ?? sha256Hex(sealedHash),
+    requestHash,
+    responseHash: input.responseHash ?? null,
     executionGraphHash: sealedHash,
     executionStatus: input.executionStatus,
   });

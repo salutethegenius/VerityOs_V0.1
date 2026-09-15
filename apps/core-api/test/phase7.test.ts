@@ -271,14 +271,25 @@ describe("Phase 7 unified execution", () => {
     });
     expect(record.statusCode).toBe(200);
     expect(record.json().execution_id).toBe(executionId);
-    expect(record.json().integrity_verified).toBe(true);
-    expect(record.json().provenance_verified).toBe(true);
+    expect(record.json().integrity_status).toBe("not_verified");
+    expect(record.json().provenance_status).toBe("linked");
+    expect(record.json()).not.toHaveProperty("integrity_verified");
+    expect(record.json()).not.toHaveProperty("provenance_verified");
     expect(record.json()).not.toHaveProperty("fact_verified");
     expect(record.json()).not.toHaveProperty("truth_verified");
     expect(record.json().final_ledger_entry.execution_graph_hash).toBe(
       finalized.json().execution_graph_hash
     );
     expect(record.json().final_ledger_entry.hash_format_version).toBe(HASH_FORMAT_VERSION);
+    const openedEntry = await pool.query<{ request_hash: string }>(
+      `SELECT request_hash FROM audit.ledger_entries
+       WHERE execution_id = $1 AND entry_type = 'request_opened'
+       ORDER BY organization_sequence ASC LIMIT 1`,
+      [executionId]
+    );
+    expect(record.json().final_ledger_entry.request_hash).toBe(openedEntry.rows[0].request_hash);
+    expect(record.json().final_ledger_entry.response_hash).toBe(executed.json().output_hash);
+    expect(completed?.output_hash).toBe(executed.json().output_hash);
 
     const graph = await app.inject({
       method: "GET",
@@ -295,6 +306,7 @@ describe("Phase 7 unified execution", () => {
       headers: sessionHeaders(admin.cookie),
     });
     expect(verified.json().integrity_verified).toBe(true);
+    expect(verified.json().provenance_verified).toBe(true);
 
     const exported = await exportOrganizationEvidence(pool, org.organization_id);
     expect(exported.manifest.hash_format_version).toBe("2");
@@ -369,7 +381,16 @@ describe("Phase 7 unified execution", () => {
       headers: sessionHeaders(admin.cookie),
     });
     expect(record.json().status).toBe("blocked");
-    expect(record.json().integrity_verified).toBe(true);
+    expect(record.json().integrity_status).toBe("not_verified");
+    expect(record.json().provenance_status).toBe("linked");
+    expect(record.json().final_ledger_entry.response_hash).toBeNull();
+    const verified = await app.inject({
+      method: "POST",
+      url: `/v1/audit/records/${opened.verity_record_id}/verify`,
+      headers: sessionHeaders(admin.cookie),
+    });
+    expect(verified.json().integrity_verified).toBe(true);
+    expect(verified.json().provenance_verified).toBe(true);
     const bundle = await exportOrganizationEvidence(pool, org.organization_id);
     expect(verifyEvidenceBundle(bundle).valid).toBe(true);
   });
@@ -653,6 +674,34 @@ describe("Phase 7 unified execution", () => {
       },
     });
     expect(inject.statusCode).toBe(404);
+  });
+
+  it("rejects organization-less credentials without platform.cross_org", async () => {
+    const org = await createOrg(app, serviceToken, "Platform Scope");
+    const opened = await openExecution(org);
+    const limited = await app.inject({
+      method: "POST",
+      url: "/internal/v1/service-credentials",
+      headers: await authHeader(),
+      payload: {
+        name: "platform-no-cross-org",
+        organization_id: null,
+        scopes: ["knowledge.read", "models.read"],
+      },
+    });
+    expect(limited.statusCode).toBe(200);
+    const retrieve = await app.inject({
+      method: "POST",
+      url: `/internal/v1/executions/${opened.execution_id}/knowledge/retrieve`,
+      headers: { authorization: `Bearer ${limited.json().token}` },
+      payload: {
+        query: "capital",
+        collection_ids: [randomUUID()],
+        mode: "strict",
+      },
+    });
+    expect(retrieve.statusCode).toBe(403);
+    expect(retrieve.json().error.code).toBe("FORBIDDEN");
   });
 });
 

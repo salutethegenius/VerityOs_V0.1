@@ -42,6 +42,10 @@ export async function getVerityRecord(
     [organizationId, execution.id]
   );
   const finalEntry = ledger.rows.find((row) => row.id === execution.final_entry_id) ?? null;
+  const linked =
+    Boolean(graphHash) &&
+    Boolean(finalEntry?.execution_graph_hash) &&
+    graphHash === finalEntry.execution_graph_hash;
   const summary = summarizeEvents(events);
   return {
     verity_record_id: execution.verity_record_id,
@@ -55,8 +59,8 @@ export async function getVerityRecord(
     model_provenance: summary.model,
     approval_summary: summary.approval,
     final_ledger_entry: finalEntry,
-    integrity_verified: Boolean(finalEntry?.execution_graph_hash && graphHash === finalEntry.execution_graph_hash),
-    provenance_verified: Boolean(graph),
+    integrity_status: "not_verified" as const,
+    provenance_status: linked ? ("linked" as const) : graph ? ("unlinked" as const) : ("absent" as const),
     execution_graph_hash: graphHash,
   };
 }

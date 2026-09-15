@@ -531,8 +531,14 @@ export async function finalizeGovernedExecution(
       metadata: { outcome: input.outcome },
     });
   }
-  const requestHash = sha256Hex(execution.id);
-  const responseHash = input.response === undefined ? null : sha256Hex(JSON.stringify(input.response));
+  const events = await listExecutionEvents(pool, execution.organization_id, execution.id);
+  let responseHash: string | null = null;
+  if (input.response !== undefined) {
+    responseHash = sha256Hex(JSON.stringify(input.response));
+  } else if (input.outcome === "completed") {
+    const completed = [...events].reverse().find((event) => event.event_type === "model.execution.completed");
+    responseHash = completed?.output_hash ?? null;
+  }
   const sealed = await sealExecution(
     pool,
     {
@@ -540,7 +546,6 @@ export async function finalizeGovernedExecution(
       executionId: execution.id,
       entryType: input.outcome === "completed" ? "final" : "failure",
       executionStatus: input.outcome,
-      requestHash,
       responseHash,
       parentEventIds,
       preludeEvents: prelude,
