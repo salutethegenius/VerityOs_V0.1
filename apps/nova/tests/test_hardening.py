@@ -205,9 +205,14 @@ async def test_postprocessed_artifact_hash_and_human_requester(store: MemoryStor
         allow=True,
         artifact_hash=waiting.artifact_hash or "",
     )
+    assert approved.status == "approved"
+    published = await engine.publish_social(
+        execution_id=waiting.execution_id,
+        actor_id="user-human",
+    )
     complete = [kwargs for name, kwargs in core.calls if name == "skill_complete"][-1]
     assert complete["result_artifact_hash"] == waiting.artifact_hash
-    assert approved.status == "completed"
+    assert published.status == "completed"
 
 
 @pytest.mark.asyncio

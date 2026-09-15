@@ -13,7 +13,7 @@ def health() -> dict:
     return {
         "status": "ok",
         "component": "nova",
-        "phase": "8",
+        "phase": "9",
         "version": __version__,
         "runtime": "verityos",
     }

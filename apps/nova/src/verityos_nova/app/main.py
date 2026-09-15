@@ -110,7 +110,7 @@ def create_app(
     slack = slack or FakeSlackClient()
     registry = build_registry(store)
     engine = SkillEngine(client, store) if client else None
-    app = FastAPI(title="VerityOS Nova", version="0.8.0")
+    app = FastAPI(title="VerityOS Nova", version="0.9.0")
     app.state.nova = NovaRuntime(
         organization_id=organization_id or os.environ.get("NOVA_ORGANIZATION_ID") or "",
         system_actor_id=system_actor_id or os.environ.get("NOVA_SYSTEM_ACTOR_ID") or "",
@@ -146,7 +146,7 @@ def create_runtime_app(environ: dict[str, str] | None = None) -> FastAPI:
     slack = HttpSlackClient(cfg["SLACK_BOT_TOKEN"])
     registry = build_registry(store)
     engine = SkillEngine(client, store)
-    app = FastAPI(title="VerityOS Nova", version="0.8.0")
+    app = FastAPI(title="VerityOS Nova", version="0.9.0")
     app.state.nova = NovaRuntime(
         organization_id=cfg["NOVA_ORGANIZATION_ID"],
         system_actor_id=cfg["NOVA_SYSTEM_ACTOR_ID"],

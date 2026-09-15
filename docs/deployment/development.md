@@ -11,7 +11,7 @@ pnpm build
 
 If Docker is unavailable, point `DATABASE_URL` at a local PostgreSQL 16 database named `verityos_audit`.
 
-Phase 3–8 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). Nova talks to Core; it does not call Anthropic or OpenAI.
+Phase 3–9 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). Nova talks to Core; it does not call Anthropic, OpenAI, or Meta. Connector Gateway tests inject fake `fetch` and `META_TEST_TOKEN`.
 
 ## CSRF / Origin (V0.1)
 

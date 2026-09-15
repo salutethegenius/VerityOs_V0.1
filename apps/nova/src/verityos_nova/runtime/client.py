@@ -8,7 +8,7 @@ from verityos_nova.runtime.errors import NovaError
 
 
 class VerityCoreClient:
-    """HTTP client for Verity Core Phase 7/8 APIs. Nova never talks to providers."""
+    """HTTP client for Verity Core APIs. Nova never talks to providers or holds connector secrets."""
 
     def __init__(self, base_url: str, token: str, timeout: float = 30.0) -> None:
         self._base = base_url.rstrip("/")
@@ -133,3 +133,12 @@ class VerityCoreClient:
 
     async def get_record(self, execution_id: str) -> dict[str, Any]:
         return await self._get(f"/internal/v1/executions/{execution_id}/record")
+
+    async def request_connector_action(self, execution_id: str, **kwargs: Any) -> dict[str, Any]:
+        return await self._post(
+            f"/internal/v1/executions/{execution_id}/connectors/actions",
+            kwargs,
+        )
+
+    async def get_connector_action(self, execution_id: str, action_id: str) -> dict[str, Any]:
+        return await self._get(f"/internal/v1/executions/{execution_id}/connectors/actions/{action_id}")

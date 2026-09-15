@@ -6,7 +6,6 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from verityos_nova.runtime.context import NovaContext
 from verityos_nova.runtime.errors import NovaError
-from verityos_nova.skills.social.image import publish_meta
 
 router = APIRouter()
 
@@ -208,6 +207,20 @@ async def onboard_start(request: Request, x_cron_secret: str | None = Header(def
 
 
 @router.post("/publish")
-async def publish(request: Request) -> None:
+async def publish(request: Request) -> dict[str, Any]:
     require_internal_auth(request)
-    publish_meta()
+    nova = _app(request)
+    if nova.engine is None:
+        raise HTTPException(status_code=503, detail="nova engine is not configured")
+    body = await request.json()
+    locked_organization_id(nova, body)
+    try:
+        outcome = await nova.engine.publish_social(
+            execution_id=body["execution_id"],
+            actor_id=body.get("actor_id") or nova.system_actor_id,
+            action=body.get("action") or "publish_post",
+            scheduled_for=body.get("scheduled_for"),
+        )
+    except NovaError as err:
+        raise HTTPException(status_code=err.status_code, detail={"code": err.code, "message": err.message}) from err
+    return outcome.__dict__

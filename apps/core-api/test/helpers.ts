@@ -14,8 +14,15 @@ export function createPool(): pg.Pool {
   return new pg.Pool({ connectionString: TEST_DATABASE_URL, max: 10 });
 }
 
-export async function startApp(pool: pg.Pool): Promise<FastifyInstance> {
-  const { app } = await buildServer({ pool });
+export async function startApp(
+  pool: pg.Pool,
+  extra: { connectorFetch?: typeof fetch; secretResolver?: (ref: string) => string | undefined } = {}
+): Promise<FastifyInstance> {
+  const { app } = await buildServer({
+    pool,
+    connectorFetch: extra.connectorFetch,
+    secretResolver: extra.secretResolver,
+  });
   return app;
 }
 

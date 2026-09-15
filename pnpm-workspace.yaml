@@ -3,6 +3,7 @@ packages:
   - "apps/shell"
   - "packages/audit-kernel"
   - "packages/command"
+  - "packages/connectors"
   - "packages/contracts"
   - "packages/identity"
   - "packages/knowledge"

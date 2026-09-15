@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -299,16 +300,7 @@ class SkillEngine:
         if item:
             item.status = "approved" if allow else "rejected"
             self.store.save_item(item)
-        if allow:
-            await self.client.skill_complete(
-                execution_id,
-                skill_id=skill_id,
-                skill_version=skill_version,
-                result_artifact_hash=artifact_hash,
-            )
-            finalized = await self.client.finalize_execution(execution_id, "completed")
-            status = "completed"
-        else:
+        if not allow:
             await self.client.skill_fail(
                 execution_id,
                 skill_id=skill_id,
@@ -316,15 +308,120 @@ class SkillEngine:
                 reason_code="APPROVAL_REJECTED",
             )
             finalized = await self.client.finalize_execution(execution_id, "blocked")
-            status = "blocked"
+            record = await self.client.get_record(execution_id)
+            return SkillRunOutcome(
+                execution_id=execution_id,
+                verity_record_id=finalized.get("verity_record_id"),
+                status="blocked",
+                artifact_hash=artifact_hash,
+                approval_id=decision.get("approval_id"),
+                item_id=item.id if item else None,
+                record=record,
+                events=["approval.decided", "finalize"],
+            )
         record = await self.client.get_record(execution_id)
         return SkillRunOutcome(
             execution_id=execution_id,
-            verity_record_id=finalized.get("verity_record_id"),
-            status=status,
+            verity_record_id=decision.get("verity_record_id") or (item.verity_record_id if item else ""),
+            status="approved",
             artifact_hash=artifact_hash,
             approval_id=decision.get("approval_id"),
             item_id=item.id if item else None,
             record=record,
-            events=["approval.decided", "finalize"],
+            events=["approval.decided"],
+        )
+
+    async def publish_social(
+        self,
+        *,
+        execution_id: str,
+        actor_id: str,
+        action: str = "publish_post",
+        scheduled_for: str | None = None,
+        skill_id: str = "nova.social.draft",
+        skill_version: str = "1.0.0",
+    ) -> SkillRunOutcome:
+        item = self.store.get_item_by_execution(execution_id)
+        if item is None:
+            raise NovaError("NOT_FOUND", "content item not found", 404)
+        if item.status not in {"approved", "publishing", "scheduling", "needs_review"}:
+            raise NovaError("INVALID_STATE", "content is not approved for publishing", 409)
+        if action in {"publish_post", "schedule_post"} and item.status == "pending_approval":
+            raise NovaError("APPROVAL_MISSING", "approval is required before publishing", 409)
+        payload: dict[str, Any] = {"message": item.draft_text, "brand_id": item.brand_id}
+        if scheduled_for:
+            payload["scheduled_for"] = scheduled_for
+            try:
+                item.scheduled_for = datetime.fromisoformat(scheduled_for.replace("Z", "+00:00"))
+            except ValueError:
+                item.scheduled_for = None
+        result = await self.client.request_connector_action(
+            execution_id,
+            connector_type="meta.facebook",
+            action=action,
+            artifact_id=item.id,
+            artifact_hash=item.artifact_hash,
+            actor_id=actor_id,
+            payload=payload,
+        )
+        if any(token_key in str(result).lower() for token_key in ("access_token", "page_access")):
+            raise NovaError("NOVA_INTERNAL_ERROR", "connector result contained a secret", 500)
+        item.connector_action_id = result.get("action_id")
+        item.external_action_id = result.get("external_action_id")
+        status = result.get("status")
+        if status == "succeeded" and action == "schedule_post":
+            item.status = "scheduled"
+        elif status == "succeeded":
+            item.status = "posted"
+        elif status == "needs_review":
+            item.status = "needs_review"
+        elif status == "failed":
+            item.status = "error"
+        self.store.save_item(item)
+        if status == "succeeded":
+            await self.client.skill_complete(
+                execution_id,
+                skill_id=skill_id,
+                skill_version=skill_version,
+                result_artifact_hash=item.artifact_hash,
+            )
+            finalized = await self.client.finalize_execution(execution_id, "completed")
+            record = await self.client.get_record(execution_id)
+            return SkillRunOutcome(
+                execution_id=execution_id,
+                verity_record_id=finalized.get("verity_record_id"),
+                status="completed",
+                artifact=item.draft_text,
+                artifact_hash=item.artifact_hash,
+                item_id=item.id,
+                record=record,
+                events=["tool.completed", "finalize"],
+            )
+        if status == "needs_review":
+            record = await self.client.get_record(execution_id)
+            return SkillRunOutcome(
+                execution_id=execution_id,
+                verity_record_id=item.verity_record_id or "",
+                status="needs_review",
+                artifact_hash=item.artifact_hash,
+                item_id=item.id,
+                record=record,
+                events=["tool.failed"],
+            )
+        await self.client.skill_fail(
+            execution_id,
+            skill_id=skill_id,
+            skill_version=skill_version,
+            reason_code=result.get("error_code") or "PROVIDER_REJECTED",
+        )
+        finalized = await self.client.finalize_execution(execution_id, "failed")
+        record = await self.client.get_record(execution_id)
+        return SkillRunOutcome(
+            execution_id=execution_id,
+            verity_record_id=finalized.get("verity_record_id"),
+            status="failed",
+            artifact_hash=item.artifact_hash,
+            item_id=item.id,
+            record=record,
+            events=["tool.failed", "finalize"],
         )

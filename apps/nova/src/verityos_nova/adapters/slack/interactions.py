@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from verityos_nova.adapters.slack.client import (
@@ -7,6 +8,8 @@ from verityos_nova.adapters.slack.client import (
     draft_blocks,
     onboarding_decision_blocks,
     platform_picker_blocks,
+    publish_action_blocks,
+    publish_status_blocks,
     resolved_blocks,
 )
 from verityos_nova.runtime.context import NovaContext
@@ -41,12 +44,43 @@ async def handle_interaction(
         return {"ok": True}
     action = actions[0]
     action_id = action.get("action_id") or ""
-    if action_id.startswith(("publish_", "schedule_")):
-        raise ConnectorUnavailableError("meta")
     channel = ((payload.get("channel") or {}).get("id")) or ""
     message = payload.get("message") or {}
     ts = message.get("ts") or ""
     original_blocks = message.get("blocks") or []
+
+    if action_id.startswith(("publish_", "schedule_")) and not action_id.startswith(
+        ("publish_now_", "schedule_now_")
+    ):
+        raise ConnectorUnavailableError("meta")
+
+    if action_id.startswith(("publish_now_", "schedule_now_")):
+        item_id = action.get("value") or action_id.rsplit("_", 1)[-1]
+        item = store.get_item(item_id)
+        if item is None or not item.execution_id:
+            return {"ok": False, "error": "item_not_found"}
+        scheduled_for = None
+        action_name = "publish_post"
+        if action_id.startswith("schedule_now_"):
+            action_name = "schedule_post"
+            scheduled_for = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+        try:
+            outcome = await engine.publish_social(
+                execution_id=item.execution_id,
+                actor_id=actor_id,
+                action=action_name,
+                scheduled_for=scheduled_for,
+            )
+        except NovaError as err:
+            return {"ok": False, "error": err.code, "message": err.message}
+        item = store.get_item(item_id) or item
+        await slack.update_message(
+            channel,
+            ts,
+            item.status,
+            blocks=publish_status_blocks(original_blocks, item.status),
+        )
+        return {"ok": True, "status": outcome.status, "execution_id": outcome.execution_id}
 
     if action_id.startswith("gen_pick_brand_"):
         brand_id = action.get("value") or action_id.split("gen_pick_brand_", 1)[-1]
@@ -140,12 +174,10 @@ async def handle_interaction(
         except NovaError as err:
             return {"ok": False, "error": err.code, "message": err.message}
         status = "approved" if allow else "rejected"
-        await slack.update_message(
-            channel,
-            ts,
-            f"{status}",
-            blocks=resolved_blocks(original_blocks, status, user_id),
-        )
+        blocks = resolved_blocks(original_blocks, status, user_id)
+        if allow and item.platform == "facebook":
+            blocks.extend(publish_action_blocks(item.id))
+        await slack.update_message(channel, ts, f"{status}", blocks=blocks)
         return {"ok": True, "status": outcome.status, "execution_id": outcome.execution_id}
     return {"ok": True, "ignored": action_id}
 

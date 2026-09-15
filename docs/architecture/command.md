@@ -15,4 +15,6 @@ V0.1 ships a deny-by-default evaluator. Decisions are machine-readable:
 }
 ```
 
-Connectors are schema-only in this phase (no Slack/Meta implementation). Skill `audit.export` requires approval under the default policy.
+Connectors are configured in `command.connectors` and bound to skills in `command.skill_connectors`. External calls go through Connector Gateway (`evaluateConnectorAction`); see [connectors.md](connectors.md). Social publishing requires approval by default (`requires_approval = true`). Skill `audit.export` also requires approval under the default policy.
+
+Connector reason codes: `CONNECTOR_ALLOWED`, `CONNECTOR_DISABLED`, `CONNECTOR_NOT_ALLOWED_FOR_SKILL`, `APPROVAL_MISSING`, `APPROVAL_ARTIFACT_MISMATCH`, `CLASSIFICATION_BLOCKED`, `ACTOR_NOT_AUTHORIZED`.

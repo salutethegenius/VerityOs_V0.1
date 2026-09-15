@@ -151,9 +151,10 @@ class PostgresStore:
             INSERT INTO social.content_items (
               id, organization_id, brand_id, platform, draft_text, pillar, status,
               execution_id, verity_record_id, artifact_hash, approval_id,
-              slack_channel, slack_message_ts, created_at
+              slack_channel, slack_message_ts, connector_action_id, scheduled_for,
+              external_action_id, created_at
             ) VALUES (
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO UPDATE SET
               draft_text = EXCLUDED.draft_text,
@@ -165,6 +166,9 @@ class PostgresStore:
               approval_id = EXCLUDED.approval_id,
               slack_channel = EXCLUDED.slack_channel,
               slack_message_ts = EXCLUDED.slack_message_ts,
+              connector_action_id = EXCLUDED.connector_action_id,
+              scheduled_for = EXCLUDED.scheduled_for,
+              external_action_id = EXCLUDED.external_action_id,
               approved_at = CASE WHEN EXCLUDED.status = 'approved' THEN now() ELSE social.content_items.approved_at END,
               rejected_at = CASE WHEN EXCLUDED.status = 'rejected' THEN now() ELSE social.content_items.rejected_at END
             """,
@@ -182,6 +186,9 @@ class PostgresStore:
                 item.approval_id,
                 item.slack_channel,
                 item.slack_message_ts,
+                item.connector_action_id,
+                item.scheduled_for,
+                item.external_action_id,
                 item.created_at,
             ),
         )
@@ -206,6 +213,9 @@ class PostgresStore:
             pillar=row["pillar"],
             slack_channel=row["slack_channel"],
             slack_message_ts=row["slack_message_ts"],
+            connector_action_id=_opt(row.get("connector_action_id")),
+            scheduled_for=row.get("scheduled_for"),
+            external_action_id=row.get("external_action_id"),
             created_at=created,
         )
 

@@ -19,7 +19,7 @@ Do not change the live Slack app request URLs in this phase. When cutover is exp
 ## Known limitations
 
 - Image generation is a hashed placeholder, not the Content-Loop SVG/design-system pipeline.
-- Meta publish/schedule returns `CONNECTOR_NOT_AVAILABLE`.
+- Meta publish/schedule is implemented in Phase 9 Connector Gateway with mock HTTP; this file remains the Phase 8 migration record. Production Content-Loop Meta is still not called from Nova.
 - Tests inject `MemoryStore`; the real runtime uses `PostgresStore` (`create_runtime_app`).
 - Slack account linking is an admin/test `POST /internal/v1/identities` mapping, not OAuth.
 
@@ -45,7 +45,7 @@ Do not change the live Slack app request URLs in this phase. When cutover is exp
 
 | Item | Status |
 | --- | --- |
-| Live Facebook / Meta Graph publish and schedule | Connector phase (`CONNECTOR_NOT_AVAILABLE`) |
+| Live Facebook / Meta Graph publish and schedule | Phase 9 Connector Gateway (`meta.facebook`, mock HTTP in CI) |
 | Design-system SVG image pipeline (cairosvg, brand templates) | Module preserved as mock placeholder |
 | Production `content_items` / `brands` data copy | Separate cutover |
 | Slack app request URL switch | Explicit later ops step |
@@ -64,7 +64,7 @@ Do not change the live Slack app request URLs in this phase. When cutover is exp
 | Private-channel `message.groups` path | `/slack/events` thread handler | Preserved |
 | Approve / Reject in place | Slack UX + Core approval bound to artifact hash | Migrated |
 | Image generation | Placeholder hash API | Deferred (non-blocking) |
-| Facebook publish/schedule | `CONNECTOR_NOT_AVAILABLE` | Deferred to connector phase |
+| Facebook publish/schedule | Connector Gateway `publish_post` / `schedule_post` | Phase 9; Nova still has no Meta token |
 | Direct Anthropic calls | Forbidden; static guard test | Removed from new runtime |
 
 ## Source tables and routes

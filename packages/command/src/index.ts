@@ -208,6 +208,26 @@ export async function seedDefaultCommand(
     [randomUUID(), input.organizationId]
   );
 
+  await pool.query(
+    `INSERT INTO command.connectors (
+       id, organization_id, connector_key, connector_type, enabled,
+       allowed_data_classes_json, capabilities, requires_approval, version, page_config
+     ) VALUES (
+       $1, $2, 'meta.facebook', 'meta.facebook', false,
+       '["public","internal"]'::jsonb,
+       '["publish_post","schedule_post","health"]'::jsonb,
+       true, '1.0.0', '{}'::jsonb
+     )
+     ON CONFLICT (organization_id, connector_key) DO NOTHING`,
+    [randomUUID(), input.organizationId]
+  );
+  await pool.query(
+    `INSERT INTO command.skill_connectors (organization_id, skill_id, connector_key, actions)
+     VALUES ($1, 'nova.social.draft', 'meta.facebook', '["publish_post","schedule_post"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+    [input.organizationId]
+  );
+
   return { policyId };
 }
 
@@ -271,12 +291,12 @@ export async function evaluatePolicy(pool: Pool, input: EvaluateInput): Promise<
     );
     const row = connector.rows[0];
     if (!row?.enabled) {
-      return decision("deny", "CONNECTOR_DENIED", ref);
+      return decision("deny", "CONNECTOR_DISABLED", ref);
     }
     if (!row.allowed_data_classes_json.includes(input.action.classification)) {
-      return decision("deny", "CLASSIFICATION_DENIED", ref);
+      return decision("deny", "CLASSIFICATION_BLOCKED", ref);
     }
-    return decision("allow", "ROLE_AND_CLASSIFICATION_ALLOWED", ref);
+    return decision("allow", "CONNECTOR_ALLOWED", ref);
   }
 
   if (input.action.type === "approval.decide") {
@@ -444,6 +464,14 @@ export async function getPendingApprovalForExecution(
   );
   return result.rows[0] ?? null;
 }
+
+export {
+  evaluateConnectorAction,
+  getConnector,
+  getConnectorByType,
+  type ConnectorRow,
+  type EvaluateConnectorInput,
+} from "./connectors.js";
 
 export async function decideApproval(
   pool: Pool,
