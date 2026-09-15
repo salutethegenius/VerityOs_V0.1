@@ -27,7 +27,7 @@ test("government communications draft approve publish verify", async ({ page }) 
   await page.getByLabel("Topic (optional)").fill(STORM_PROMPT);
   await page.getByRole("checkbox", { name: "Institutional Guidance (Synthetic Demo)" }).check();
   await page.getByRole("button", { name: "Generate draft" }).click();
-  await expect(page.getByRole("heading", { name: "Pending approval" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Awaiting approval" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("nova-citations")).toBeVisible();
   await page.getByRole("button", { name: "Log out" }).click();
 

@@ -25,7 +25,8 @@ Release candidate for VerityOS V0.1 (Phase 11 hardening). Pilot system, not a ce
 ### Operator polish (post-hands-on)
 
 - Seed files always write to repository-root `tmp/` and print the real path (Nova tokens not printed)
-- Shell: citation grouping, mock-output labeling, approval/user/Knowledge copy, login redirect coverage
+- Shell: citation grouping (display only), mock-output labeling, approval/user/Knowledge copy, login redirect coverage
+- Awaiting-approval copy, brand names, and Knowledge collection states stay aligned with existing Core semantics
 
 ### Not in this candidate
 

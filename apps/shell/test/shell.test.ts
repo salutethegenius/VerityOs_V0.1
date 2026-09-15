@@ -36,6 +36,7 @@ describe("display helpers", () => {
   it("shortens hashes and maps connector states", () => {
     expect(shortHash("a".repeat(64))).toContain("…");
     expect(connectorStateLabel("needs_review")).toBe("Needs review");
+    expect(connectorStateLabel("pending_approval")).toBe("Awaiting approval");
     expect(connectorStateLabel("posted")).toBe("Published");
     expect(connectorStateLabel("failed")).toBe("Failed");
     expect(sourceTrustState({ approved_at: null, indexed: false })).toBe("Uploaded");
@@ -52,7 +53,7 @@ describe("display helpers", () => {
 
 describe("operator display", () => {
   it("dedupes citation titles without dropping chunk counts", async () => {
-    const { dedupeCitations } = await import("../lib/operator-display");
+    const { citationsForDisplay, dedupeCitations } = await import("../lib/operator-display");
     const visible = dedupeCitations([
       { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c1" },
       { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c2" },
@@ -62,6 +63,16 @@ describe("operator display", () => {
     expect(visible).toHaveLength(2);
     expect(visible[0]).toMatchObject({ title: "Public Emergency Advisory Guidance", chunkCount: 3 });
     expect(visible[1]).toMatchObject({ title: "Shelter Guide", chunkCount: 1 });
+
+    const execute = [
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c1" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c2" },
+    ];
+    const detail = [{ title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_count: 2 }];
+    expect(dedupeCitations(citationsForDisplay(execute, detail))).toEqual([
+      expect.objectContaining({ title: "Public Emergency Advisory Guidance", chunkCount: 2 }),
+    ]);
+    expect(dedupeCitations(citationsForDisplay(execute, []))).toHaveLength(1);
   });
 
   it("labels mock adapter output without rewriting the recorded artifact", async () => {

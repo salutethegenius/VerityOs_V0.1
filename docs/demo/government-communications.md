@@ -47,7 +47,7 @@ Passwords are printed once at seed. Development profile uses documented demo pas
 
 4. Check **Institutional Guidance (Synthetic Demo)**. Generate draft.
 5. Point at citations (approved source versions) and the sealed artifact hash. Explain Model Router selected the allowed mock/local model.
-6. Status is pending approval. Log out.
+6. Status is **Awaiting approval**. Log out.
 7. Sign in as Director. Command → Approvals. Show the **exact** artifact / hash. Approve.
 8. Nova → open the same run → **Publish Now** (mock Meta). Confirm **Published**.
 9. Audit → open the Verity Record → **Verify Record**. Show **Integrity Verified** and **Provenance Verified**.

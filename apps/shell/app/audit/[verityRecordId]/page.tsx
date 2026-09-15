@@ -6,6 +6,7 @@ import { exportEvidence, getGraph, getRecord, verifyRecord } from "@/lib/api/aud
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, StatusPill } from "@/components/ui";
 import { HashValue } from "@/components/HashValue";
 import { eventLabel, formatTime } from "@/lib/format";
+import { skillLabel } from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -109,7 +110,7 @@ export default function RecordPage() {
           <Field label="Verity Record ID" value={record.data.verity_record_id} mono />
           <Field label="Execution ID" value={record.data.execution_id} mono />
           <Field label="Actor" value={record.data.actor_name || record.data.actor_email || record.data.actor} />
-          <Field label="Skill" value={record.data.skill} />
+          <Field label="Skill" value={skillLabel(record.data.skill)} />
           <Field label="Risk" value={record.data.risk} />
           <Field label="Status" value={record.data.status} />
           <Field label="Policy version" value={String(record.data.policy_version ?? "—")} />

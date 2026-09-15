@@ -12,5 +12,9 @@ export default function CommandIndex() {
   useEffect(() => {
     router.replace(first);
   }, [first, router]);
-  return null;
+  return (
+    <p className="text-sm text-muted" role="status">
+      Opening Command…
+    </p>
+  );
 }

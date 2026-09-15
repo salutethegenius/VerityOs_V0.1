@@ -18,6 +18,7 @@ import { HashValue } from "@/components/HashValue";
 import { connectorStateLabel, formatTime } from "@/lib/format";
 import {
   actorDisplay,
+  citationsForDisplay,
   dedupeCitations,
   executionStatusLabel,
   presentMockArtifact,
@@ -180,6 +181,7 @@ export default function NovaPage() {
                 setBusy(false);
               }
             }}
+            brands={brands.data?.brands ?? []}
             onPublish={async (action, scheduledFor) => {
               if (!detail?.social_item) return;
               setBusy(true);
@@ -226,7 +228,7 @@ export default function NovaPage() {
               <dt className="text-muted">Citations</dt>
               <dd>
                 <CitationList
-                  citations={[...(result?.citations ?? []), ...(detail?.citations ?? [])]}
+                  citations={citationsForDisplay(result?.citations, detail?.citations)}
                   recordId={governance.recordId}
                   hadRetrieval={Boolean(
                     detail?.events.some((event) => event.event_type.startsWith("knowledge.retrieval"))
@@ -441,6 +443,7 @@ function ResultPane({
   onEdit,
   canApprove,
   actorId,
+  brands,
   onDecide,
   onPublish,
 }: {
@@ -453,6 +456,7 @@ function ResultPane({
   onEdit: (value: string) => void;
   canApprove: boolean;
   actorId?: string;
+  brands: Array<{ brand_id: string; display_name: string }>;
   onDecide: (allow: boolean) => Promise<void>;
   onPublish: (action: "publish_post" | "schedule_post", scheduledFor?: string) => Promise<void>;
 }) {
@@ -468,9 +472,6 @@ function ResultPane({
         <div className="mb-3 border border-warn/40 bg-[var(--accent-soft)] px-3 py-2 text-sm" role="status" data-testid="insufficient-evidence">
           Insufficient approved evidence
         </div>
-      ) : null}
-      {result?.status === "blocked" ? (
-        <p className="mb-3 text-sm font-medium text-warn">Insufficient approved evidence</p>
       ) : null}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <StatusPill label={executionStatusLabel(status)} />
@@ -491,7 +492,10 @@ function ResultPane({
         <dl className="mt-4 grid gap-2 text-sm md:grid-cols-2">
           <div>
             <dt className="text-muted">Brand</dt>
-            <dd>{detail.social_item.brand_id}</dd>
+            <dd>
+              {brands.find((brand) => brand.brand_id === detail.social_item?.brand_id)?.display_name ??
+                detail.social_item.brand_id}
+            </dd>
           </div>
           <div>
             <dt className="text-muted">Artifact hash</dt>

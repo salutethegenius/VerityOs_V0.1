@@ -20,7 +20,7 @@ test("social draft approve publish and verify", async ({ page }) => {
   await page.getByRole("tab", { name: "Social Draft" }).click();
   await page.getByLabel("Brand").selectOption({ label: "Acme" });
   await page.getByRole("button", { name: "Generate draft" }).click();
-  await expect(page.getByRole("heading", { name: "Pending approval" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Awaiting approval" })).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "Log out" }).click();
 
   await signIn(page, adminEmail, adminPassword);

@@ -9,6 +9,15 @@ export type DisplayCitation = {
   page?: string | number;
 };
 
+/** Prefer reconstructed run-detail citations so execute + detail lists are not summed. */
+export function citationsForDisplay(
+  executeCitations?: Citation[] | null,
+  detailCitations?: Citation[] | null
+): Citation[] {
+  if (detailCitations && detailCitations.length > 0) return detailCitations;
+  return executeCitations ?? [];
+}
+
 export function dedupeCitations(citations: Citation[] | null | undefined): DisplayCitation[] {
   const groups = new Map<string, DisplayCitation>();
   for (const citation of citations ?? []) {
