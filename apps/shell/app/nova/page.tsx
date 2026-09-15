@@ -463,6 +463,8 @@ function ResultPane({
   const [schedule, setSchedule] = useState("");
   const status = result?.status ?? detail?.execution.status;
   const artifact = draftEdit ?? sealed;
+  const execLabel = executionStatusLabel(status);
+  const socialLabel = detail?.social_item ? connectorStateLabel(detail.social_item.status) : null;
   if (!result && !detail) {
     return <EmptyState title="No result yet" body="Run a skill or open a previous execution." />;
   }
@@ -474,9 +476,9 @@ function ResultPane({
         </div>
       ) : null}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <StatusPill label={executionStatusLabel(status)} />
+        <StatusPill label={execLabel} />
         {unsealed ? <StatusPill label="Unsealed local edit" tone="warn" /> : null}
-        {detail?.social_item ? <StatusPill label={connectorStateLabel(detail.social_item.status)} /> : null}
+        {socialLabel && socialLabel !== execLabel ? <StatusPill label={socialLabel} /> : null}
       </div>
       <ArtifactView
         text={artifact}
