@@ -22,7 +22,9 @@ Strict mode still returns `insufficient_evidence` when keyword evidence is missi
 
 ## Provenance
 
-`knowledge.retrieval_hits` may record `retrieved`, `ranked`, and `returned_to_caller`. `included_in_context` stays false until Nova/model execution proves a chunk entered model context (Phase 7/8). Returning a hit from Knowledge is not inclusion in context.
+`knowledge.retrieval_hits` may record `retrieved`, `ranked`, and `returned_to_caller`. `included_in_context` stays false until Core constructs the governed model prompt from verified chunks of that retrieval run (Phase 7). Returning a hit from Knowledge is not inclusion in context. Nova must not mark arbitrary chunks as included.
+
+If existing chunks were created under a different `embedding_provider_key`, `indexSourceVersion` returns `REINDEX_REQUIRED` (409). It does not silently delete or rebuild embeddings. `reindexSourceVersion` is the explicit authorized rebuild.
 
 ## Embeddings (V0.1)
 

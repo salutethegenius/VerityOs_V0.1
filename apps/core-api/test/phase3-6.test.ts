@@ -347,7 +347,6 @@ describe("Phase 6 knowledge and exit gate", () => {
       url: "/internal/v1/knowledge/retrieve",
       headers: { authorization: `Bearer ${serviceToken}` },
       payload: {
-        execution_id: randomUUID(),
         organization_id: orgA.organization_id,
         actor_id: orgA.admin_user_id,
         query: "What is the capital of France?",
@@ -367,7 +366,6 @@ describe("Phase 6 knowledge and exit gate", () => {
       url: "/internal/v1/knowledge/retrieve",
       headers: { authorization: `Bearer ${serviceToken}` },
       payload: {
-        execution_id: randomUUID(),
         organization_id: orgA.organization_id,
         actor_id: orgA.admin_user_id,
         query: "boiling point of liquid nitrogen lasagna recipe",

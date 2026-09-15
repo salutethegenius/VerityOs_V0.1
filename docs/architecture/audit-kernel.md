@@ -88,9 +88,9 @@ The library and `verity-verify` CLI can verify:
 - Merkle proofs and checkpoints
 - an exported evidence bundle with no database access
 
-A modified hashed field, swapped sibling, or altered `created_at_canonical` must fail verification.
+A modified hashed field, swapped sibling, altered `created_at_canonical`, or mutated Execution Graph V2 evidence must fail verification.
 
-V0.2 verification of an exported bundle does not prove that the chain is complete against a later head, or that execution metadata (actor, policy, Knowledge, approval, action) has been cryptographically committed. See [threat-model.md](../security/threat-model.md).
+V0.2 verification of an exported bundle does not prove that the chain is complete against a later head. Execution Graph V2 (`execution_graph_schema_version = "2"`) commits observable execution events into `execution_graph_hash` on the final ledger entry. That graph schema version is independent of `hash_format_version`. Older V2 rows with `execution_graph_hash = null` remain verifiable. See [execution-graph-v2.md](execution-graph-v2.md) and [threat-model.md](../security/threat-model.md).
 
 ### What the Kernel does not do
 

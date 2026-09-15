@@ -52,12 +52,12 @@ describe("V2 checkpoints", () => {
       entryType: "final",
       requestHash: contentHash("artifact-draft"),
       responseHash: contentHash("published"),
-      executionGraphHash: contentHash("graph"),
+      executionGraphHash: null,
     });
     expect(finalized.previous_entry_hash).toBe(approval.entry_hash);
     expect(finalized.organization_sequence).toBe(3);
 
-    const exec = await getExecution(pool, execution.id);
+    const exec = await getExecution(pool, organizationId, execution.id);
     expect(exec?.status).toBe("completed");
     expect(exec?.final_entry_id).toBe(finalized.id);
 

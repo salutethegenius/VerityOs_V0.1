@@ -130,3 +130,82 @@ export interface KnowledgeRetrieveResponse {
   insufficient_evidence: boolean;
   hits: KnowledgeHit[];
 }
+
+export const EXECUTION_GRAPH_SCHEMA_VERSION = "2";
+
+export const EXECUTION_EVENT_TYPES = [
+  "execution.created",
+  "identity.authenticated",
+  "authorization.started",
+  "authorization.allowed",
+  "authorization.denied",
+  "risk.classified",
+  "knowledge.retrieval.started",
+  "knowledge.retrieval.completed",
+  "knowledge.retrieval.insufficient",
+  "model.routing.started",
+  "model.selected",
+  "model.routing.failed",
+  "model.execution.started",
+  "model.execution.completed",
+  "model.execution.failed",
+  "nova.skill.started",
+  "nova.skill.completed",
+  "nova.skill.failed",
+  "validation.started",
+  "validation.passed",
+  "validation.failed",
+  "approval.requested",
+  "approval.approved",
+  "approval.rejected",
+  "approval.expired",
+  "tool.requested",
+  "tool.authorized",
+  "tool.denied",
+  "tool.completed",
+  "tool.failed",
+  "release.started",
+  "release.completed",
+  "release.blocked",
+  "execution.failed",
+  "execution.blocked",
+  "execution.completed",
+  "audit.checkpoint.sealed",
+] as const;
+
+export type ExecutionEventType = (typeof EXECUTION_EVENT_TYPES)[number];
+
+export type ExecutionEventStatus =
+  | "recorded"
+  | "started"
+  | "ok"
+  | "denied"
+  | "failed"
+  | "blocked"
+  | "insufficient";
+
+export interface ExecutionGraphNode {
+  event_id: string;
+  sequence: number;
+  event_type: ExecutionEventType;
+  status: string;
+  occurred_at_canonical: string;
+  input_hash: string | null;
+  output_hash: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ExecutionGraphEdge {
+  from_event_id: string;
+  to_event_id: string;
+}
+
+export interface ExecutionGraphV2 {
+  schema_version: typeof EXECUTION_GRAPH_SCHEMA_VERSION;
+  execution_id: string;
+  verity_record_id: string;
+  organization_id: string;
+  status: ExecutionStatus;
+  nodes: ExecutionGraphNode[];
+  edges: ExecutionGraphEdge[];
+}

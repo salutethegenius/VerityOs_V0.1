@@ -12,7 +12,7 @@ import {
   listPolicies,
   seedDefaultCommand,
 } from "@verityos/command";
-import type { DataClassification, KnowledgeMode } from "@verityos/contracts";
+import type { DataClassification, KnowledgeMode, RiskTier } from "@verityos/contracts";
 import {
   AuthError,
   SESSION_COOKIE,
@@ -28,6 +28,7 @@ import {
   resolveServiceToken,
   resolveSession,
   selectOrganization,
+  PLATFORM_CROSS_ORG_SCOPE,
   type AuthContext,
   type ServiceContext,
 } from "@verityos/identity";
@@ -40,15 +41,28 @@ import {
   createCollection,
   indexSourceVersion,
   listReadableCollections,
+  reindexSourceVersion,
   requireCollectionPermission,
-  retrieve,
   uploadSourceVersion,
 } from "@verityos/knowledge";
 import { listModels, registerModel, routeModel } from "@verityos/model-router";
-import { exportOrganizationEvidence, getLedgerEntries } from "@verityos/audit-kernel";
-import { recordKernelCheckpoint } from "./audit.js";
+import {
+  exportOrganizationEvidence,
+  getExecution,
+  getLedgerEntries,
+  verifyEvidenceBundle,
+} from "@verityos/audit-kernel";
+import { recordKernelCheckpoint, withStandaloneExecution } from "./audit.js";
 import { loadConfig } from "./config.js";
 import { ApiError, publicMessage } from "./errors.js";
+import {
+  ExecutionError,
+  executeModelForExecution,
+  finalizeGovernedExecution,
+  openGovernedExecution,
+  retrieveForExecution,
+} from "./execution/service.js";
+import { getVerityGraph, getVerityRecord, listVerityRecords } from "./execution/records.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -134,15 +148,19 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   });
 
   app.setErrorHandler((err, request, reply) => {
-    const mapped =
-      err instanceof AuthError || err instanceof KnowledgeError
-        ? { statusCode: err.statusCode, code: err.code, message: err.message }
-        : publicMessage(err);
+    const known =
+      err instanceof AuthError ||
+      err instanceof KnowledgeError ||
+      err instanceof ExecutionError ||
+      err instanceof ApiError;
+    const mapped = known
+      ? { statusCode: err.statusCode, code: err.code, message: err.message }
+      : publicMessage(err);
     const status = mapped.statusCode >= 400 ? mapped.statusCode : 500;
     reply.status(status).send({
       error: {
-        code: status >= 500 ? "INTERNAL_ERROR" : mapped.code,
-        message: status >= 500 ? "internal error" : mapped.message,
+        code: status >= 500 && !known ? "INTERNAL_ERROR" : mapped.code,
+        message: status >= 500 && !known ? "internal error" : mapped.message,
         request_id: request.requestId,
       },
     });
@@ -151,7 +169,7 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   app.get("/v1/health", async () => ({
     status: "ok",
     component: "core-api",
-    phase: "3-6",
+    phase: "7",
   }));
 
   app.post("/v1/auth/login", async (request, reply) => {
@@ -409,30 +427,32 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       preferLocal?: boolean;
     }
   ) {
-    const routed = await routeModel(pool, {
-      organizationId: input.organizationId,
-      actorId: input.actorId,
-      roleId: input.roleId,
-      request: {
-        execution_id: input.executionId ?? randomUUID(),
-        task: input.task,
-        risk_tier: input.riskTier,
-        data_classification: input.dataClassification,
-        required_capabilities: input.requiredCapabilities ?? ["chat"],
-        prefer_local: input.preferLocal ?? false,
-      },
-    });
-    if (routed.model_id) {
-      await recordKernelCheckpoint(pool, {
+    const routed = await withStandaloneExecution(
+      pool,
+      {
         organizationId: input.organizationId,
         actorId: input.actorId,
         sessionId: input.sessionId,
         skillId: "models.route",
-        entryType: "action_completed",
+        roleId: input.roleId,
         request: { task: input.task, classification: input.dataClassification },
-        response: routed,
-      });
-    }
+        executionId: input.executionId,
+      },
+      async (executionId) =>
+        routeModel(pool, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          roleId: input.roleId,
+          request: {
+            execution_id: executionId,
+            task: input.task,
+            risk_tier: input.riskTier,
+            data_classification: input.dataClassification,
+            required_capabilities: input.requiredCapabilities ?? ["chat"],
+            prefer_local: input.preferLocal ?? false,
+          },
+        })
+    );
     return routed;
   }
 
@@ -532,6 +552,7 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       actorId: auth.userId,
       sessionId: auth.sessionId,
       skillId: "knowledge.manage",
+      roleId: auth.roleId,
       entryType: "action_completed",
       request: { collection_id: collectionId, filename: file.filename },
       response: { source_id: uploaded.sourceId, version_id: uploaded.versionId, content_hash: uploaded.contentHash },
@@ -587,6 +608,27 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     return result;
   });
 
+  app.post("/v1/knowledge/versions/:versionId/reindex", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "knowledge.manage");
+    const { versionId } = request.params as { versionId: string };
+    const collectionId = await collectionIdForVersion(pool, {
+      organizationId: auth.organizationId,
+      versionId,
+    });
+    await requireCollectionPermission(pool, {
+      organizationId: auth.organizationId,
+      collectionId,
+      roleId: auth.roleId,
+      capability: "can_manage",
+    });
+    const result = await reindexSourceVersion(pool, {
+      organizationId: auth.organizationId,
+      versionId,
+    });
+    return result;
+  });
+
   async function handleRetrieve(request: FastifyRequest, actor: {
     organizationId: string;
     actorId: string;
@@ -610,44 +652,32 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     if (!body.query || !body.collection_ids?.length) {
       throw new ApiError(400, "INVALID_INPUT", "query and collection_ids are required");
     }
-    const policy = await evaluatePolicy(pool, {
-      organizationId: actor.organizationId,
-      actorId: actor.actorId,
-      roleId: actor.roleId,
-      action: {
-        type: "knowledge.read",
-        classification: body.classification_ceiling ?? "internal",
-      },
-    });
-    if (policy.decision !== "allow") {
-      throw new ApiError(403, policy.reason_code, "knowledge retrieve denied");
-    }
-    const result = await retrieve(pool, {
-      organizationId: actor.organizationId,
-      actorId: actor.actorId,
-      roleId: actor.roleId,
-      executionId: body.execution_id ?? null,
+    const payload = {
       query: body.query,
       collectionIds: body.collection_ids,
-      mode: body.mode ?? "strict",
+      mode: body.mode ?? "strict" as KnowledgeMode,
       topK: body.top_k ?? 8,
-      classificationCeiling: body.classification_ceiling ?? "internal",
-    });
-    await recordKernelCheckpoint(pool, {
-      organizationId: actor.organizationId,
-      actorId: actor.actorId,
-      sessionId: actor.sessionId,
-      skillId: "knowledge.retrieve",
-      entryType: "action_completed",
-      request: { query: body.query, mode: body.mode ?? "strict", collection_ids: body.collection_ids },
-      response: {
-        retrieval_run_id: result.retrieval_run_id,
-        insufficient_evidence: result.insufficient_evidence,
-        hit_ids: result.hits.map((h) => h.chunk_id),
-        content_hashes: result.hits.map((h) => h.content_hash),
+      classificationCeiling: body.classification_ceiling ?? "internal" as DataClassification,
+    };
+    if (body.execution_id) {
+      const execution = await getExecution(pool, actor.organizationId, body.execution_id);
+      if (!execution) {
+        throw new ApiError(404, "NOT_FOUND", "execution not found");
+      }
+      return retrieveForExecution(pool, { executionId: body.execution_id, ...payload });
+    }
+    return withStandaloneExecution(
+      pool,
+      {
+        organizationId: actor.organizationId,
+        actorId: actor.actorId,
+        sessionId: actor.sessionId,
+        skillId: "knowledge.retrieve",
+        roleId: actor.roleId,
+        request: { query: body.query, mode: payload.mode, collection_ids: body.collection_ids },
       },
-    });
-    return result;
+      async (executionId) => retrieveForExecution(pool, { executionId, ...payload })
+    );
   }
 
   app.post("/v1/knowledge/retrieve", async (request) => {
@@ -808,6 +838,186 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       throw new ApiError(404, "NOT_FOUND", "source not found");
     }
     return source.rows[0];
+  });
+
+  async function requireScopedExecution(service: ServiceContext, executionId: string) {
+    if (!service.organizationId && !service.scopes.includes(PLATFORM_CROSS_ORG_SCOPE)) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "platform credentials require platform.cross_org to access executions across organizations"
+      );
+    }
+    if (service.organizationId) {
+      const execution = await getExecution(pool, service.organizationId, executionId);
+      if (!execution) {
+        throw new ApiError(404, "NOT_FOUND", "execution not found");
+      }
+      return execution;
+    }
+    const result = await pool.query(
+      `SELECT * FROM audit.executions WHERE id = $1`,
+      [executionId]
+    );
+    if (!result.rows[0]) {
+      throw new ApiError(404, "NOT_FOUND", "execution not found");
+    }
+    return result.rows[0];
+  }
+
+  app.post("/internal/v1/executions", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const body = request.body as {
+      organization_id?: string;
+      actor_id?: string;
+      skill_id?: string;
+      risk_tier?: RiskTier;
+      retention_mode?: string;
+      request?: unknown;
+    };
+    const organizationId = service.organizationId
+      ? assertOrganizationScope(service.organizationId, body.organization_id)
+      : body.organization_id;
+    if (!organizationId || !body.actor_id || !body.skill_id) {
+      throw new ApiError(400, "INVALID_INPUT", "organization_id, actor_id, and skill_id are required");
+    }
+    const membership = await pool.query<{ role_id: string }>(
+      `SELECT role_id FROM auth.memberships WHERE user_id = $1 AND organization_id = $2`,
+      [body.actor_id, organizationId]
+    );
+    if (!membership.rows[0]) {
+      throw new ApiError(403, "NOT_A_MEMBER", "actor is not a member of that organization");
+    }
+    const execution = await openGovernedExecution(pool, {
+      organizationId,
+      actorId: body.actor_id,
+      skillId: body.skill_id,
+      riskTier: body.risk_tier ?? "low",
+      retentionMode: body.retention_mode ?? "standard",
+      request: body.request ?? {},
+      roleId: membership.rows[0].role_id,
+    });
+    return {
+      execution_id: execution.id,
+      verity_record_id: execution.verity_record_id,
+      status: execution.status,
+    };
+  });
+
+  app.post("/internal/v1/executions/:executionId/knowledge/retrieve", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const { executionId } = request.params as { executionId: string };
+    await requireScopedExecution(service, executionId);
+    if (!service.scopes.includes("knowledge.read")) {
+      throw new ApiError(403, "FORBIDDEN", "missing knowledge.read scope");
+    }
+    const body = request.body as {
+      query?: string;
+      collection_ids?: string[];
+      mode?: KnowledgeMode;
+      top_k?: number;
+      classification_ceiling?: DataClassification;
+    };
+    if (!body.query || !body.collection_ids?.length) {
+      throw new ApiError(400, "INVALID_INPUT", "query and collection_ids are required");
+    }
+    return retrieveForExecution(pool, {
+      executionId,
+      query: body.query,
+      collectionIds: body.collection_ids,
+      mode: body.mode ?? "strict",
+      topK: body.top_k,
+      classificationCeiling: body.classification_ceiling ?? "internal",
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/model/execute", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const { executionId } = request.params as { executionId: string };
+    await requireScopedExecution(service, executionId);
+    if (!service.scopes.includes("models.read")) {
+      throw new ApiError(403, "FORBIDDEN", "missing models.read scope");
+    }
+    const body = request.body as {
+      task?: string;
+      risk_tier?: RiskTier;
+      data_classification?: DataClassification;
+      required_capabilities?: string[];
+      prefer_local?: boolean;
+      content?: string;
+      retrieval_run_id?: string;
+      context_chunk_ids?: string[];
+    };
+    if (!body.task || !body.content || !body.risk_tier || !body.data_classification) {
+      throw new ApiError(400, "INVALID_INPUT", "task, content, risk_tier, and data_classification are required");
+    }
+    return executeModelForExecution(pool, {
+      executionId,
+      task: body.task,
+      riskTier: body.risk_tier,
+      dataClassification: body.data_classification,
+      requiredCapabilities: body.required_capabilities,
+      preferLocal: body.prefer_local,
+      content: body.content,
+      retrievalRunId: body.retrieval_run_id,
+      contextChunkIds: body.context_chunk_ids,
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/finalize", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const { executionId } = request.params as { executionId: string };
+    const execution = await requireScopedExecution(service, executionId);
+    const body = request.body as {
+      outcome?: "completed" | "failed" | "blocked";
+      inject_failure?: boolean;
+    };
+    return finalizeGovernedExecution(pool, {
+      executionId,
+      organizationId: execution.organization_id,
+      outcome: body.outcome ?? "completed",
+      injectFailure:
+        body.inject_failure === true && process.env.VERITY_ALLOW_FAILURE_INJECTION === "true",
+    });
+  });
+
+  app.get("/v1/audit/records", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "audit.read");
+    return { records: await listVerityRecords(pool, auth.organizationId) };
+  });
+
+  app.get("/v1/audit/records/:verityRecordId", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "audit.read");
+    const { verityRecordId } = request.params as { verityRecordId: string };
+    return getVerityRecord(pool, auth.organizationId, verityRecordId);
+  });
+
+  app.get("/v1/audit/records/:verityRecordId/graph", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "audit.read");
+    const { verityRecordId } = request.params as { verityRecordId: string };
+    return getVerityGraph(pool, auth.organizationId, verityRecordId);
+  });
+
+  app.post("/v1/audit/records/:verityRecordId/verify", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "audit.read");
+    const { verityRecordId } = request.params as { verityRecordId: string };
+    const record = await getVerityRecord(pool, auth.organizationId, verityRecordId);
+    const bundle = await exportOrganizationEvidence(pool, auth.organizationId);
+    const verification = verifyEvidenceBundle(bundle);
+    const provenanceVerified =
+      verification.valid && record.provenance_status === "linked";
+    return {
+      verity_record_id: verityRecordId,
+      integrity_verified: verification.valid,
+      provenance_verified: provenanceVerified,
+      integrity_status: verification.valid ? "verified" : "failed",
+      provenance_status: provenanceVerified ? "verified" : record.provenance_status,
+      issues: verification.issues,
+    };
   });
 
   return { app, pool };

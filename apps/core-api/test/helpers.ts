@@ -40,7 +40,7 @@ export async function seedPlatformService(pool: pg.Pool): Promise<string> {
   const created = await createServiceCredential(pool, {
     name: `platform-${randomUUID()}`,
     organizationId: null,
-    scopes: ["organization.manage", "knowledge.read", "models.read"],
+    scopes: ["organization.manage", "knowledge.read", "models.read", "platform.cross_org"],
   });
   return created.token;
 }

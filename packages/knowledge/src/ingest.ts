@@ -137,11 +137,10 @@ export async function approveSourceVersion(
   }
 }
 
-export async function indexSourceVersion(
+async function loadVersion(
   pool: Pool,
-  input: { organizationId: string; versionId: string },
-  provider: EmbeddingProvider = embeddingProviderFromEnv()
-): Promise<{ chunkCount: number }> {
+  input: { organizationId: string; versionId: string }
+) {
   const version = await pool.query<{
     id: string;
     organization_id: string;
@@ -157,24 +156,26 @@ export async function indexSourceVersion(
   if (!row || row.organization_id !== input.organizationId) {
     throw new KnowledgeError("NOT_FOUND", "version not found", 404);
   }
-  const existing = await pool.query(
-    `SELECT 1 FROM knowledge.chunks WHERE source_version_id = $1 LIMIT 1`,
-    [input.versionId]
-  );
-  if (existing.rows.length > 0) {
-    const count = await pool.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM knowledge.chunks WHERE source_version_id = $1`,
-      [input.versionId]
-    );
-    return { chunkCount: Number(count.rows[0].n) };
-  }
+  return row;
+}
 
+async function writeChunks(
+  pool: Pool,
+  input: {
+    organizationId: string;
+    versionId: string;
+    contentHash: string;
+    blobUri: string;
+    mimeType: string;
+  },
+  provider: EmbeddingProvider
+): Promise<number> {
   const { readBlob } = await import("./storage.js");
-  const bytes = await readBlob(row.blob_uri);
-  if (sha256Bytes(bytes) !== row.content_hash) {
+  const bytes = await readBlob(input.blobUri);
+  if (sha256Bytes(bytes) !== input.contentHash) {
     throw new KnowledgeError("BLOB_HASH_MISMATCH", "blob content hash mismatch", 500);
   }
-  const text = await extractText(row.mime_type, bytes);
+  const text = await extractText(input.mimeType, bytes);
   const chunks = chunkText(text);
   const embeddings = await provider.embed(chunks.map((chunk) => chunk.text));
   const client = await pool.connect();
@@ -202,7 +203,7 @@ export async function indexSourceVersion(
           vectorLiteral(embedding),
           JSON.stringify({
             parser_version: PARSER_VERSION,
-            content_hash: row.content_hash,
+            content_hash: input.contentHash,
             embedding_provider_key: provider.key,
           }),
           provider.key,
@@ -217,5 +218,84 @@ export async function indexSourceVersion(
   } finally {
     client.release();
   }
-  return { chunkCount: chunks.length };
+  return chunks.length;
+}
+
+export async function indexSourceVersion(
+  pool: Pool,
+  input: { organizationId: string; versionId: string },
+  provider: EmbeddingProvider = embeddingProviderFromEnv()
+): Promise<{ chunkCount: number }> {
+  const row = await loadVersion(pool, input);
+  const existing = await pool.query<{ embedding_provider_key: string }>(
+    `SELECT embedding_provider_key FROM knowledge.chunks WHERE source_version_id = $1 LIMIT 1`,
+    [input.versionId]
+  );
+  if (existing.rows[0]) {
+    if (existing.rows[0].embedding_provider_key !== provider.key) {
+      throw new KnowledgeError(
+        "REINDEX_REQUIRED",
+        "existing chunks were created by a different embedding provider",
+        409
+      );
+    }
+    const count = await pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM knowledge.chunks WHERE source_version_id = $1`,
+      [input.versionId]
+    );
+    return { chunkCount: Number(count.rows[0].n) };
+  }
+  const chunkCount = await writeChunks(
+    pool,
+    {
+      organizationId: input.organizationId,
+      versionId: input.versionId,
+      contentHash: row.content_hash,
+      blobUri: row.blob_uri,
+      mimeType: row.mime_type,
+    },
+    provider
+  );
+  return { chunkCount };
+}
+
+export async function reindexSourceVersion(
+  pool: Pool,
+  input: { organizationId: string; versionId: string },
+  provider: EmbeddingProvider = embeddingProviderFromEnv()
+): Promise<{ chunkCount: number }> {
+  const row = await loadVersion(pool, input);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM knowledge.retrieval_hits
+       WHERE chunk_id IN (
+         SELECT id FROM knowledge.chunks WHERE source_version_id = $1 AND organization_id = $2
+       )`,
+      [input.versionId, input.organizationId]
+    );
+    await client.query(
+      `DELETE FROM knowledge.chunks WHERE source_version_id = $1 AND organization_id = $2`,
+      [input.versionId, input.organizationId]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  const chunkCount = await writeChunks(
+    pool,
+    {
+      organizationId: input.organizationId,
+      versionId: input.versionId,
+      contentHash: row.content_hash,
+      blobUri: row.blob_uri,
+      mimeType: row.mime_type,
+    },
+    provider
+  );
+  return { chunkCount };
 }

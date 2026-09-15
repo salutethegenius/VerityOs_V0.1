@@ -11,7 +11,7 @@ pnpm build
 
 If Docker is unavailable, point `DATABASE_URL` at a local PostgreSQL 16 database named `verityos_audit`.
 
-Phase 3–6 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). A local LLM or local embedding service is optional. Kernel tests still use no model provider. Enable the `vector` extension (Compose `pgvector/pgvector:pg16` already includes it).
+Phase 3–7 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). A local LLM or local embedding service is optional. Kernel tests still use no model provider. Enable the `vector` extension (Compose `pgvector/pgvector:pg16` already includes it).
 
 ## CSRF / Origin (V0.1)
 

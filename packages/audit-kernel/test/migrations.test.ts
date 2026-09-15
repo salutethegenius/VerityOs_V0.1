@@ -92,4 +92,22 @@ describe("audit V2 migrations", () => {
       { column_name: "created_at_canonical", data_type: "text" },
     ]);
   });
+
+  it("rejects UPDATE and DELETE on execution_events", async () => {
+    const organizationId = randomUUID();
+    const execution = await openExecution(pool, { organizationId });
+    const { appendExecutionEvent } = await import("../src/execution/events.js");
+    const event = await appendExecutionEvent(pool, {
+      organizationId,
+      executionId: execution.id,
+      eventType: "execution.created",
+      status: "recorded",
+    });
+    await expect(
+      pool.query("UPDATE audit.execution_events SET status = status WHERE id = $1", [event.id])
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      pool.query("DELETE FROM audit.execution_events WHERE id = $1", [event.id])
+    ).rejects.toThrow(/append-only/);
+  });
 });

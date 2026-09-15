@@ -32,6 +32,15 @@ const DEPLOY_RANK: Record<DeploymentType, number> = {
   cloud: 2,
 };
 
+export async function getModel(
+  pool: Pool,
+  organizationId: string,
+  modelId: string
+): Promise<ModelRow | null> {
+  const models = await listModels(pool, organizationId);
+  return models.find((m) => m.id === modelId) ?? null;
+}
+
 export async function listModels(pool: Pool, organizationId: string): Promise<ModelRow[]> {
   const result = await pool.query<ModelRow>(
     `SELECT id, organization_id, model_key, provider, deployment_type, endpoint,

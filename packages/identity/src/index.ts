@@ -5,6 +5,8 @@ import { hashPassword, hashSecret, verifyPassword } from "./passwords.js";
 
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 export const SESSION_COOKIE = "verity_session";
+/** Service-credential scope. Organization-less credentials are platform/root. */
+export const PLATFORM_CROSS_ORG_SCOPE = "platform.cross_org";
 
 export interface AuthContext {
   userId: string;
