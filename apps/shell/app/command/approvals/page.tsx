@@ -7,7 +7,7 @@ import { decideNovaApproval } from "@/lib/api/nova";
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from "@/components/ui";
 import { HashValue } from "@/components/HashValue";
 import { ActorLabel } from "@/components/ActorLabel";
-import { formatTime } from "@/lib/format";
+import { formatTime, shortHash } from "@/lib/format";
 import { approvalFilterLabel, skillLabel } from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
@@ -86,7 +86,7 @@ export default function ApprovalsPage() {
                   <td>
                     {row.verity_record_id ? (
                       <Link className="font-mono text-xs underline" href={`/audit/${row.verity_record_id}`}>
-                        {row.verity_record_id.slice(0, 8)}
+                        {shortHash(row.verity_record_id)}
                       </Link>
                     ) : (
                       "—"

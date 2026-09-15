@@ -34,6 +34,7 @@ describe("permission-aware navigation", () => {
 
 describe("display helpers", () => {
   it("shortens hashes and maps connector states", () => {
+    expect(shortHash("VTY-2026-A1B2C3D4")).toBe("VTY-2026-A1B2C3D4");
     expect(shortHash("a".repeat(64))).toContain("…");
     expect(connectorStateLabel("needs_review")).toBe("Needs review");
     expect(connectorStateLabel("pending_approval")).toBe("Awaiting approval");

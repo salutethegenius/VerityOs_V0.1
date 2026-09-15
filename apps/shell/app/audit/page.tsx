@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { listRecords } from "@/lib/api/audit";
 import { EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
-import { formatTime } from "@/lib/format";
+import { formatTime, shortHash } from "@/lib/format";
 import { actorDisplay, executionStatusLabel, skillLabel } from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 
@@ -43,7 +43,7 @@ export default function AuditPage() {
                 <td className="font-mono text-xs">
                   {row.verity_record_id ? (
                     <Link className="underline" href={`/audit/${row.verity_record_id}`}>
-                      {row.verity_record_id.slice(0, 8)}
+                      {shortHash(row.verity_record_id)}
                     </Link>
                   ) : (
                     "—"

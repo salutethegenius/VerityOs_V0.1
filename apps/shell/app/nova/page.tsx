@@ -15,7 +15,7 @@ import { listCollections } from "@/lib/api/knowledge";
 import { CoreApiError } from "@/lib/api/client";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, StatusPill } from "@/components/ui";
 import { HashValue } from "@/components/HashValue";
-import { connectorStateLabel, formatTime } from "@/lib/format";
+import { connectorStateLabel, formatTime, shortHash } from "@/lib/format";
 import {
   actorDisplay,
   citationsForDisplay,
@@ -217,7 +217,7 @@ export default function NovaPage() {
                     href={`/audit/${governance.recordId}`}
                     data-testid="verity-record-link"
                   >
-                    {governance.recordId.slice(0, 8)}
+                    {shortHash(governance.recordId)}
                   </Link>
                 ) : (
                   "—"
