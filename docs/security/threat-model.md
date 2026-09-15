@@ -31,7 +31,9 @@
 - Supply-chain / dependency scanning beyond CI install
 - Signing and external chain anchoring
 - OCR and unapproved-version preview as a management capability
-- Verity Shell UI
+- Verity Shell UI (see Phase 10 architecture docs and [v0.1-threat-model.md](./v0.1-threat-model.md) for the full V0.1 boundary set)
+
+Phase 11 adds configuration profiles, backup/restore, rate limiting, and demo hardening. It does **not** add chain-head signing. The unsigned-head limitation in this document still applies.
 
 Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. External clients talk to Core API; Knowledge retrieve is internal-or-session, never a public unauthenticated surface.
 

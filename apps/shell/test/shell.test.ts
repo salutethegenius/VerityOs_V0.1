@@ -49,3 +49,14 @@ describe("display helpers", () => {
     expect(local !== sealed).toBe(true);
   });
 });
+
+describe("browser-safe configuration", () => {
+  it("does not place secrets in NEXT_PUBLIC_ variables", async () => {
+    const { readFileSync } = await import("node:fs");
+    const example = readFileSync(new URL("../../../.env.example", import.meta.url), "utf8");
+    for (const line of example.split("\n")) {
+      if (!line.startsWith("NEXT_PUBLIC_")) continue;
+      expect(line).not.toMatch(/SECRET|TOKEN|PASSWORD|DATABASE_URL|sk-|xoxb/i);
+    }
+  });
+});

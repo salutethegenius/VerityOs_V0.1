@@ -8,6 +8,7 @@
     "lint": "eslint src",
     "start": "node dist/start.js",
     "seed:dev": "node dist/seed-dev.js",
+    "seed:demo": "node dist/seed-demo.js",
     "test": "vitest run"
   },
   "dependencies": {

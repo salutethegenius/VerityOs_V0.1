@@ -1,0 +1,13 @@
+SYNTHETIC DEMO DOCUMENT
+NOT OFFICIAL GOVERNMENT POLICY
+
+Data Classification Policy (fictional)
+
+Public: already released through an approved public advisory.
+Internal: institutional guidance such as this pack; may ground drafts but is not automatically public.
+Confidential: not for connector publish in this demo.
+Restricted: never sent to a cloud model.
+
+Knowledge retrieval for public advisories must stay within approved source versions. Unapproved uploads are not evidence.
+
+This text file is fictional demo material.

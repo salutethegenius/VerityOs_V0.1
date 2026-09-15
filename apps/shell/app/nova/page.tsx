@@ -220,7 +220,7 @@ export default function NovaPage() {
                 {(result?.citations ?? []).length === 0 ? (
                   "None"
                 ) : (
-                  <ul className="list-disc pl-4">
+                  <ul className="list-disc pl-4" data-testid="nova-citations">
                     {result?.citations?.map((c, i) => (
                       <li key={i}>{c.title ?? c.source_id ?? "source"}{c.page ? ` p.${c.page}` : ""}</li>
                     ))}
@@ -456,8 +456,8 @@ function ResultPane({
   }
   return (
     <Panel>
-      {status === "blocked" || (status === "failed" && skillId === "nova.research") ? (
-        <div className="mb-3 border border-warn/40 bg-[var(--accent-soft)] px-3 py-2 text-sm" role="status">
+      {status === "blocked" || result?.status === "blocked" || (status === "failed" && skillId === "nova.research") ? (
+        <div className="mb-3 border border-warn/40 bg-[var(--accent-soft)] px-3 py-2 text-sm" role="status" data-testid="insufficient-evidence">
           Insufficient approved evidence
         </div>
       ) : null}

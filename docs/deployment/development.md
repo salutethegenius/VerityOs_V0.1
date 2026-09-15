@@ -55,13 +55,32 @@ CORE_API_URL=http://127.0.0.1:8080 pnpm --filter @verityos/shell dev
 
 Open http://127.0.0.1:3000/login and sign in as `admin@verity.local` / `verity-dev-admin`. Social drafts require a second actor for approval (`member@verity.local` / `verity-dev-member`); self-approval is denied.
 
+Government communications demo (synthetic org, not a ministry):
+
+```bash
+VERITY_PROFILE=development VERITY_DEMO_RESET=1 pnpm demo:reset
+# director@verity-demo.local / communications@verity-demo.local / analyst@verity-demo.local
+# See docs/demo/government-communications.md
+```
+
+`pnpm demo:reset` refuses to run unless `VERITY_PROFILE` is `demo` or `development` and `VERITY_DEMO_RESET=1`.
+
 Mock embeddings: keep `VERITY_EMBEDDING_PROVIDER=mock`. Mock model adapter is the seeded `mock-local` row. Nova is locked to a single `NOVA_ORGANIZATION_ID` per process.
 
 Optional Compose stack (after seed, with tokens in the environment):
 
 ```bash
-docker compose --profile stack up
+docker compose --profile stack up     # development-like
+VERITY_PROFILE=demo docker compose --profile demo up
 ```
+
+Postgres and `VERITY_DATA_DIR` persist in volumes `verityos_pgdata` and `verityos_data`.
+
+Health: Core/Nova/Shell expose `/health/live` and `/health/ready`. Ready checks do not return secrets.
+
+Shell CSP allows `'unsafe-inline'` (and `'unsafe-eval'` in `next dev`) so Next.js can boot. Core API uses `default-src 'none'`. HSTS is set only when `COOKIE_SECURE=true`.
+
+Backup: `scripts/backup.sh` / `scripts/restore.sh` — see [../operations/backup-restore.md](../operations/backup-restore.md).
 
 Browser E2E (Playwright, Chromium):
 

@@ -16,33 +16,51 @@ services:
       timeout: 5s
       retries: 5
 
-  core-api:
-    profiles: ["stack"]
+  mock-meta:
+    profiles: ["stack", "demo"]
     image: node:20-bookworm
     working_dir: /workspace
     volumes:
       - .:/workspace
+    command: bash -lc "node scripts/meta-mock.mjs"
+    environment:
+      META_MOCK_HOST: "0.0.0.0"
+      META_MOCK_PORT: "8099"
+    ports:
+      - "8099:8099"
+
+  core-api:
+    profiles: ["stack", "demo"]
+    image: node:20-bookworm
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - verityos_data:/var/verity-data
     command: bash -lc "pnpm --filter @verityos/core-api start"
     environment:
       DATABASE_URL: postgres://verityos:verityos@postgres:5432/verityos_audit
       PORT: "8080"
       CORS_ORIGIN: http://127.0.0.1:3000
       COOKIE_SECURE: "false"
+      SESSION_SECRET: ${SESSION_SECRET:-compose-demo-session-secret-change-before-use}
+      VERITY_PROFILE: ${VERITY_PROFILE:-development}
+      VERITY_DEPLOYMENT_PROFILE: ${VERITY_PROFILE:-development}
       VERITY_EMBEDDING_PROVIDER: mock
-      VERITY_DATA_DIR: /tmp/verity-data
+      VERITY_DATA_DIR: /var/verity-data
       NOVA_INTERNAL_URL: http://nova:8090
       NOVA_INTERNAL_TOKEN: ${NOVA_INTERNAL_TOKEN:-}
-      META_GRAPH_BASE: ${META_GRAPH_BASE:-https://graph.facebook.com}
-      META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
-      VERITY_DEPLOYMENT_PROFILE: development
+      META_GRAPH_BASE: http://mock-meta:8099
+      META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-fake-page-token}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      mock-meta:
+        condition: service_started
 
   nova:
-    profiles: ["stack"]
+    profiles: ["stack", "demo"]
     image: python:3.12-bookworm
     working_dir: /workspace
     volumes:
@@ -63,7 +81,7 @@ services:
       - core-api
 
   shell:
-    profiles: ["stack"]
+    profiles: ["stack", "demo"]
     image: node:20-bookworm
     working_dir: /workspace
     volumes:
@@ -72,6 +90,7 @@ services:
     environment:
       CORE_API_URL: http://core-api:8080
       PORT: "3000"
+      CORS_ORIGIN: http://127.0.0.1:3000
     ports:
       - "3000:3000"
     depends_on:
@@ -79,3 +98,4 @@ services:
 
 volumes:
   verityos_pgdata:
+  verityos_data:

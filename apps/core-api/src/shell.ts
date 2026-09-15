@@ -20,7 +20,10 @@ import type { AuthContext } from "@verityos/identity";
 import { PRODUCTION_EMBEDDING_DIMENSIONS } from "@verityos/knowledge";
 import { loadPermissions } from "@verityos/identity";
 
-export type NovaInvoker = (path: string, init?: { method?: string; body?: unknown }) => Promise<unknown>;
+export type NovaInvoker = (
+  path: string,
+  init?: { method?: string; body?: unknown; requestId?: string }
+) => Promise<unknown>;
 
 export function createNovaInvoker(baseUrl?: string, token?: string): NovaInvoker | undefined {
   const url = (baseUrl ?? process.env.NOVA_INTERNAL_URL ?? "").replace(/\/$/, "");
@@ -29,12 +32,16 @@ export function createNovaInvoker(baseUrl?: string, token?: string): NovaInvoker
     return undefined;
   }
   return async (path, init) => {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/json",
+    };
+    if (init?.requestId) {
+      headers["x-request-id"] = init.requestId;
+    }
     const response = await fetch(`${url}${path}`, {
       method: init?.method ?? "GET",
-      headers: {
-        authorization: `Bearer ${secret}`,
-        "content-type": "application/json",
-      },
+      headers,
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     });
     const text = await response.text();
@@ -175,7 +182,7 @@ export async function systemStatus(
   );
   const dataDir = process.env.VERITY_DATA_DIR ?? "./data";
   return {
-    core: { status: "ok", phase: "10", database: Boolean(db.rows[0]) },
+    core: { status: "ok", phase: "11", database: Boolean(db.rows[0]) },
     nova,
     kernel: {
       version: process.env.AUDIT_KERNEL_VERSION ?? "0.2.0",
@@ -192,7 +199,7 @@ export async function systemStatus(
       key: row.connector_key,
       enabled: row.enabled,
     })),
-    deployment_profile: process.env.VERITY_DEPLOYMENT_PROFILE ?? "development",
+    deployment_profile: process.env.VERITY_PROFILE ?? process.env.VERITY_DEPLOYMENT_PROFILE ?? "development",
   };
 }
 

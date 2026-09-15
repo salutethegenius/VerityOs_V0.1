@@ -28,6 +28,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-surface focus:px-3 focus:py-2">
+        Skip to main content
+      </a>
       <aside className="flex w-full shrink-0 flex-col bg-rail text-[var(--rail-ink)] md:w-56">
         <div className="border-b border-white/10 px-5 py-5">
           <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--rail-muted)]">Operating environment</p>
@@ -37,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main id="main" className="flex-1 overflow-x-auto px-6 py-6">{children}</main>
       </div>
     </div>
   );
