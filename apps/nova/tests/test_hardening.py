@@ -7,8 +7,13 @@ import httpx
 import pytest
 from fakes import FakeCoreClient
 from fastapi.testclient import TestClient
-from verityos_nova.adapters.slack.client import HttpSlackClient
-from verityos_nova.app.main import create_app, create_runtime_app, load_runtime_env
+from verityos_nova.adapters.slack.client import FakeSlackClient, HttpSlackClient
+from verityos_nova.app.main import (
+    create_app,
+    create_dev_app,
+    create_runtime_app,
+    load_runtime_env,
+)
 from verityos_nova.runtime.context import (
     NovaContext,
     SkillPlan,
@@ -81,6 +86,47 @@ def test_create_app_refuses_non_test_startup(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     with pytest.raises(RuntimeConfigError, match="create_runtime_app"):
         create_app()
+
+
+def test_create_dev_app_requires_flag(store: MemoryStore) -> None:
+    with pytest.raises(RuntimeConfigError, match="NOVA_DEV_MODE"):
+        create_dev_app(
+            {
+                "DATABASE_URL": "postgres://x",
+                "CORE_API_URL": "http://127.0.0.1:8080",
+                "NOVA_SERVICE_TOKEN": "tok",
+                "NOVA_ORGANIZATION_ID": "org",
+                "NOVA_SYSTEM_ACTOR_ID": "user",
+                "NOVA_INTERNAL_TOKEN": "int",
+            },
+            store=store,
+            client=FakeCoreClient(),
+        )
+
+
+def test_create_dev_app_uses_fake_slack(store: MemoryStore) -> None:
+    app = create_dev_app(
+        {
+            "NOVA_DEV_MODE": "1",
+            "DATABASE_URL": "postgres://x",
+            "CORE_API_URL": "http://127.0.0.1:8080",
+            "NOVA_SERVICE_TOKEN": "tok",
+            "NOVA_ORGANIZATION_ID": "org-1",
+            "NOVA_SYSTEM_ACTOR_ID": "user-system",
+            "NOVA_INTERNAL_TOKEN": "internal-secret",
+        },
+        store=store,
+        client=FakeCoreClient(),
+    )
+    assert isinstance(app.state.nova.slack, FakeSlackClient)
+    client = TestClient(app)
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["phase"] == "10"
+    skills = client.get("/internal/v1/skills", headers={"authorization": "Bearer internal-secret"})
+    assert skills.status_code == 200
+    ids = {row["id"] for row in skills.json()["skills"]}
+    assert ids == {"nova.research", "nova.drafting", "nova.social.draft"}
 
 
 def test_runtime_mode_slack_and_cron_fail_closed(store: MemoryStore) -> None:

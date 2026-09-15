@@ -125,4 +125,35 @@ describe("connector registry and Meta adapter", () => {
       })
     ).rejects.toMatchObject({ code: "AMBIGUOUS_PROVIDER_OUTCOME", ambiguous: true });
   });
+
+  it("uses META_GRAPH_BASE at request time", async () => {
+    const previous = process.env.META_GRAPH_BASE;
+    process.env.META_GRAPH_BASE = "http://127.0.0.1:8099";
+    const seen: string[] = [];
+    const connector = new MetaFacebookConnector({
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify({ id: "111_222" }), { status: 200 });
+      },
+    });
+    try {
+      await connector.execute({
+        connectorId: "c1",
+        connectorType: "meta.facebook",
+        action: "publish_post",
+        artifactHash: sha256Hex("x"),
+        payload: { message: "x" },
+        secret: "tok",
+        pageId: "page-dev",
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.META_GRAPH_BASE;
+      } else {
+        process.env.META_GRAPH_BASE = previous;
+      }
+    }
+    expect(seen[0]).toContain("http://127.0.0.1:8099/");
+    expect(seen[0]).not.toContain("graph.facebook.com");
+  });
 });

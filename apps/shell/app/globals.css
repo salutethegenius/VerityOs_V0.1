@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --rail: #16181c;
+  --rail-ink: #e8e6e1;
+  --rail-muted: #9a9892;
+  --paper: #f3f1ec;
+  --surface: #fcfbf8;
+  --ink: #1c1b19;
+  --muted: #5f5c56;
+  --line: #d8d3c8;
+  --accent: #2f4a3c;
+  --accent-soft: #e4ece6;
+  --ok: #2c5e3f;
+  --warn: #8a6a24;
+  --danger: #8a2f2f;
+  --focus: #1c4d7c;
+  --font-sans: "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 0.35rem 0.7rem; font-size: 0.8125rem; }
+.btn:hover { background: #efece5; }
+.btn-primary { background: var(--accent); color: #f7f4ee; border-color: var(--accent); }
+.btn-danger { color: var(--danger); }
+.link-btn { color: var(--accent); font-size: 0.75rem; text-decoration: underline; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8125rem; }
+.field input, .field select, .field textarea {
+  border: 1px solid var(--line); background: #fff; padding: 0.45rem 0.55rem; color: var(--ink);
+}
+table.data { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+table.data th { text-align: left; font-weight: 600; border-bottom: 1px solid var(--line); padding: 0.5rem; }
+table.data td { border-bottom: 1px solid var(--line); padding: 0.5rem; vertical-align: top; }
+

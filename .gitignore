@@ -16,4 +16,7 @@ __pycache__/
 tmp/
 data/
 .turbo/
+.next/
+playwright-report/
+test-results/
 *.tsbuildinfo

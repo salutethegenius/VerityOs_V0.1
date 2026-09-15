@@ -15,7 +15,11 @@
     "db:migrate:down": "node-pg-migrate down -m db/migrations",
     "db:migrate:create": "node-pg-migrate create -m db/migrations",
     "test:python": "python3 -m pytest apps/nova apps/knowledge packages/sdk-python",
-    "lint:python": "python3 -m ruff check apps/nova apps/knowledge packages/sdk-python"
+    "lint:python": "python3 -m ruff check apps/nova apps/knowledge packages/sdk-python",
+    "seed:dev": "pnpm --filter @verityos/core-api seed:dev",
+    "dev:core": "pnpm --filter @verityos/core-api start",
+    "dev:shell": "pnpm --filter @verityos/shell dev",
+    "test:e2e": "node scripts/run-e2e.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]

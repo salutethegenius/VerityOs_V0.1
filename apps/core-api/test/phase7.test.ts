@@ -706,9 +706,9 @@ describe("Phase 7 unified execution", () => {
 });
 
 describe("health", () => {
-  it("reports phase 9", async () => {
+  it("reports phase 10", async () => {
     const health = await app.inject({ method: "GET", url: "/v1/health" });
-    expect(health.json().phase).toBe("9");
+    expect(health.json().phase).toBe("10");
     expect(TEST_ORIGIN).toBeTruthy();
   });
 });

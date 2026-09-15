@@ -22,7 +22,7 @@ VerityOS is a governed, grounded, auditable AI operating environment. Nova, Know
           local | private | cloud
 ```
 
-Phase 3–9 implements identity, Command policy, Model Router V2, native Verity Knowledge, Execution Graph V2, the Nova operator runtime, and Connector Gateway (Meta publishing) on top of the frozen Audit Kernel. The Kernel is a dependency and trust boundary; Hash Format V2 is not modified.
+Phase 3–10 implements identity, Command policy, Model Router V2, native Verity Knowledge, Execution Graph V2, the Nova operator runtime, Connector Gateway (Meta publishing), and the Verity Shell on top of the frozen Audit Kernel. The Kernel is a dependency and trust boundary; Hash Format V2 is not modified.
 
 ## Non-negotiable rules
 
@@ -35,8 +35,8 @@ Phase 3–9 implements identity, Command policy, Model Router V2, native Verity 
 
 ## Current phase boundary
 
-**In scope through Phase 9:** Nova skill contract (`nova.social.draft`, `nova.research`, `nova.drafting`), organization-scoped Core client, Slack adapter, Command-bound artifact approval, Connector Gateway, and mock-tested `meta.facebook` publish/schedule. Hash Format V2 and Execution Graph V2 hashing are unchanged.
+**In scope through Phase 10:** Verity Shell (Next.js operator UI), session-authenticated Core facades for Nova/home/system, Nova skill contract (`nova.social.draft`, `nova.research`, `nova.drafting`), organization-scoped Core client, Slack adapter, Command-bound artifact approval, Connector Gateway, and mock-tested `meta.facebook` publish/schedule. Hash Format V2 and Execution Graph V2 hashing are unchanged.
 
-**Out of scope until a later prompt:** Verity Shell UI, production Content-Loop cutover, email/SMS/payment/database connectors, Hummingbird packaging, signing/external anchoring, OIDC/SAML.
+**Out of scope until a later prompt:** production Content-Loop cutover, email/SMS/payment/database connectors, Hummingbird packaging, signing/external anchoring, OIDC/SAML.
 
 See [execution-graph-v2.md](execution-graph-v2.md).
