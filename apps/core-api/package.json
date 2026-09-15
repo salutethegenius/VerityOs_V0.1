@@ -15,6 +15,7 @@
     "@fastify/multipart": "^8.3.1",
     "@verityos/audit-kernel": "workspace:*",
     "@verityos/command": "workspace:*",
+    "@verityos/connectors": "workspace:*",
     "@verityos/contracts": "workspace:*",
     "@verityos/identity": "workspace:*",
     "@verityos/knowledge": "workspace:*",

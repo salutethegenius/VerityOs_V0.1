@@ -204,16 +204,43 @@ def resolved_blocks(original: list[dict[str, Any]], status: str, user_id: str | 
             "elements": [{"type": "mrkdwn", "text": f"*{label}*{mention}"}],
         }
     )
-    if status == "approved":
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "Publishing is `CONNECTOR_NOT_AVAILABLE` in this runtime.",
-                    }
-                ],
-            }
-        )
+    return blocks
+
+
+def publish_action_blocks(item_id: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Publish Now"},
+                    "action_id": unique_action_id("publish_now", item_id),
+                    "value": item_id,
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Schedule"},
+                    "action_id": unique_action_id("schedule_now", item_id),
+                    "value": item_id,
+                },
+            ],
+        }
+    ]
+
+
+def publish_status_blocks(original: list[dict[str, Any]], status: str) -> list[dict[str, Any]]:
+    blocks = [b for b in original if b.get("type") != "actions"]
+    labels = {
+        "posted": "Published",
+        "scheduled": "Scheduled",
+        "needs_review": "Needs review",
+        "error": "Publish failed",
+    }
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"*{labels.get(status, status)}*"}],
+        }
+    )
     return blocks

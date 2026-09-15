@@ -69,6 +69,16 @@ import {
   requestExecutionApproval,
 } from "./execution/lifecycle.js";
 import { getVerityGraph, getVerityRecord, listVerityRecords } from "./execution/records.js";
+import {
+  envSecretResolver,
+  createDefaultConnectorRegistry,
+  type SecretResolver,
+} from "@verityos/connectors";
+import {
+  getConnectorAction,
+  healthCheckConnector,
+  requestConnectorAction,
+} from "./connectors/gateway.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -107,11 +117,21 @@ function setSessionCookie(reply: FastifyReply, token: string, secure: boolean): 
   });
 }
 
-export async function buildServer(options: { pool?: Pool } = {}) {
+export async function buildServer(
+  options: {
+    pool?: Pool;
+    connectorFetch?: typeof fetch;
+    secretResolver?: SecretResolver;
+  } = {}
+) {
   const config = loadConfig();
   const pool =
     options.pool ??
     new pg.Pool({ connectionString: config.databaseUrl, max: 10 });
+  const connectorRegistry = createDefaultConnectorRegistry({
+    fetchImpl: options.connectorFetch,
+  });
+  const connectorSecrets = options.secretResolver ?? envSecretResolver();
   const app = Fastify({
     logger: false,
     trustProxy: config.trustProxy,
@@ -175,7 +195,7 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   app.get("/v1/health", async () => ({
     status: "ok",
     component: "core-api",
-    phase: "8",
+    phase: "9",
   }));
 
   app.post("/v1/auth/login", async (request, reply) => {
@@ -1120,6 +1140,63 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     const service = await resolveServiceToken(pool, bearer(request));
     const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
     return getVerityRecord(pool, execution.organization_id, execution.verity_record_id);
+  });
+
+  app.post("/internal/v1/executions/:executionId/connectors/actions", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(
+      service,
+      (request.params as { executionId: string }).executionId
+    );
+    const body = request.body as {
+      connector_id?: string;
+      connector_type?: string;
+      action?: string;
+      artifact_id?: string;
+      artifact_hash?: string;
+      actor_id?: string;
+      payload?: Record<string, unknown>;
+    };
+    if (!body.action || !body.artifact_hash || !body.actor_id) {
+      throw new ApiError(400, "INVALID_INPUT", "action, artifact_hash, and actor_id are required");
+    }
+    return requestConnectorAction(
+      pool,
+      { registry: connectorRegistry, secrets: connectorSecrets },
+      {
+        organizationId: execution.organization_id,
+        executionId: execution.id,
+        actorId: body.actor_id,
+        connectorId: body.connector_id,
+        connectorType: body.connector_type ?? "meta.facebook",
+        action: body.action,
+        artifactId: body.artifact_id,
+        artifactHash: body.artifact_hash,
+        payload: body.payload ?? {},
+      }
+    );
+  });
+
+  app.get("/internal/v1/executions/:executionId/connectors/actions/:actionId", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const { executionId, actionId } = request.params as { executionId: string; actionId: string };
+    const execution = await requireScopedExecution(service, executionId);
+    return getConnectorAction(pool, execution.organization_id, execution.id, actionId);
+  });
+
+  app.post("/internal/v1/connectors/:connectorId/health", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const { connectorId } = request.params as { connectorId: string };
+    if (!service.organizationId) {
+      throw new ApiError(403, "FORBIDDEN", "connector health requires an organization-scoped credential");
+    }
+    return healthCheckConnector(
+      pool,
+      { registry: connectorRegistry, secrets: connectorSecrets },
+      { organizationId: service.organizationId, connectorId }
+    );
   });
 
   app.get("/v1/audit/records", async (request) => {

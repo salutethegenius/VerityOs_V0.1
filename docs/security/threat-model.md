@@ -27,11 +27,11 @@
 
 - OIDC/SAML and a general-purpose CSRF token framework (V0.1 uses a strict allowed-Origin check plus SameSite cookies)
 - Session fixation beyond hashed tokens
-- Connector (Slack/Meta) implementation and abuse
+- Production Meta/Slack cutover and remaining connectors (email, SMS, payments, government, database)
 - Supply-chain / dependency scanning beyond CI install
 - Signing and external chain anchoring
 - OCR and unapproved-version preview as a management capability
-- Nova runtime migration and Verity Shell UI
+- Verity Shell UI
 
 Anonymous management APIs for organizations, Knowledge, models, users, policies, or connectors must not ship. External clients talk to Core API; Knowledge retrieve is internal-or-session, never a public unauthenticated surface.
 

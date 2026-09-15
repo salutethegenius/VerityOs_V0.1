@@ -82,7 +82,7 @@ def store() -> MemoryStore:
 
 
 def test_version() -> None:
-    assert __version__ == "0.8.0"
+    assert __version__ == "0.9.0"
 
 
 def test_skill_registry_and_manifests(store: MemoryStore) -> None:
@@ -234,8 +234,16 @@ async def test_social_e2e_approve_and_reject(store: MemoryStore) -> None:
         allow=True,
         artifact_hash=waiting.artifact_hash or "",
     )
-    assert approved.status == "completed"
+    assert approved.status == "approved"
     assert store.get_item(item.id).status == "approved"
+    published = await engine.publish_social(
+        execution_id=waiting.execution_id,
+        actor_id="user-human",
+        action="publish_post",
+    )
+    assert published.status == "completed"
+    assert store.get_item(item.id).status == "posted"
+    assert any(name == "request_connector_action" for name, _ in core.calls)
     assert any(name == "skill_complete" for name, _ in core.calls)
     assert any(name == "finalize_execution" for name, _ in core.calls)
 
@@ -402,7 +410,7 @@ def test_health_and_skills_api(store: MemoryStore) -> None:
     )
     client = TestClient(app)
     health = client.get("/health")
-    assert health.json()["phase"] == "8"
+    assert health.json()["phase"] == "9"
     denied = client.get("/internal/v1/skills")
     assert denied.status_code == 401
     skills = client.get("/internal/v1/skills", headers={"authorization": "Bearer internal-secret"})
@@ -555,8 +563,24 @@ async def test_slack_generate_then_approve(store: MemoryStore) -> None:
         organization_id="org-1",
         system_actor_id="user-system",
     )
-    assert approved["status"] == "completed"
+    assert approved["status"] == "approved"
     assert store.get_item(item.id).status == "approved"
+    published = await handle_interaction(
+        payload={
+            "user": {"id": "U123"},
+            "channel": {"id": "C-test"},
+            "message": {"ts": slack.posted[-1].ts, "blocks": slack.posted[-1].blocks},
+            "actions": [{"action_id": f"publish_now_{item.id}", "value": item.id}],
+        },
+        store=store,
+        slack=slack,
+        engine=engine,
+        registry=registry,
+        organization_id="org-1",
+        system_actor_id="user-system",
+    )
+    assert published["status"] == "completed"
+    assert store.get_item(item.id).status == "posted"
 
 
 def test_image_placeholder_hash() -> None:

@@ -54,6 +54,9 @@ class ContentItem:
     pillar: str | None = None
     slack_channel: str | None = None
     slack_message_ts: str | None = None
+    connector_action_id: str | None = None
+    scheduled_for: datetime | None = None
+    external_action_id: str | None = None
     id: str = field(default_factory=lambda: str(uuid4()))
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

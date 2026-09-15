@@ -53,6 +53,9 @@ importers:
       '@verityos/command':
         specifier: workspace:*
         version: link:../../packages/command
+      '@verityos/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@verityos/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -130,6 +133,22 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.23.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)
+
+  packages/connectors:
+    dependencies:
+      '@verityos/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

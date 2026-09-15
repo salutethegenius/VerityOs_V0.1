@@ -122,3 +122,29 @@ class FakeCoreClient:
             "provenance_status": "linked",
             "events": self.events[execution_id],
         }
+
+    async def request_connector_action(self, execution_id: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("request_connector_action", {"execution_id": execution_id, **kwargs}))
+        if any(key in str(kwargs).lower() for key in ("access_token", "meta_page_access")):
+            raise AssertionError("Nova must not send Meta secrets")
+        payload = kwargs.get("payload") or {}
+        message = payload.get("message") or ""
+        if kwargs.get("artifact_hash") != sha256_text(message):
+            from verityos_nova.runtime.errors import NovaError
+
+            raise NovaError("APPROVAL_ARTIFACT_MISMATCH", "payload message does not match artifact hash", 409)
+        action_id = str(uuid4())
+        result = {
+            "action_id": action_id,
+            "status": getattr(self, "connector_status", "succeeded"),
+            "external_action_id": "fb_post_1",
+            "artifact_hash": kwargs.get("artifact_hash"),
+            "error_code": getattr(self, "connector_error", None),
+        }
+        self.events[execution_id].append("tool.requested")
+        self.events[execution_id].append("tool.authorized")
+        if result["status"] == "succeeded":
+            self.events[execution_id].append("tool.completed")
+        else:
+            self.events[execution_id].append("tool.failed")
+        return result

@@ -8,7 +8,7 @@ Nova is not VerityOS. Knowledge is not VerityOS. The Audit Kernel is not VerityO
 
 ## Current status
 
-Phase 8: Nova operator runtime on the Phase 7 execution lifecycle. See [docs/architecture/nova.md](docs/architecture/nova.md) and [docs/migration/nova-phase8.md](docs/migration/nova-phase8.md). Hash Format V2 is unchanged. Production Content-Loop is not modified.
+Phase 9: Connector Gateway and governed Meta publishing on the Phase 8 Nova runtime. See [docs/architecture/connectors.md](docs/architecture/connectors.md). Hash Format V2 and Execution Graph V2 hashing are unchanged. Production Content-Loop is not modified.
 
 Production Nova remains the [Content Loop](https://github.com/salutethegenius/Content-Loop) deployment. This repository does not modify that production system.
 
@@ -16,7 +16,7 @@ Production Nova remains the [Content Loop](https://github.com/salutethegenius/Co
 
 ```text
 apps/           core-api, nova runtime, shell stubs; knowledge Python package
-packages/       audit-kernel, identity, command, model-router, knowledge, contracts, sdks
+packages/       audit-kernel, identity, command, connectors, model-router, knowledge, contracts, sdks
 db/migrations   single node-pg-migrate history
 tests/          audit tests and Nova behavior fixtures
 docs/           architecture, security, deployment, migration inventory

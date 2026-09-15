@@ -5,6 +5,7 @@ RUN corepack enable && corepack prepare pnpm@10.33.3 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/audit-kernel/package.json packages/audit-kernel/
 COPY packages/command/package.json packages/command/
+COPY packages/connectors/package.json packages/connectors/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/identity/package.json packages/identity/
 COPY packages/knowledge/package.json packages/knowledge/
