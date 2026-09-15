@@ -26,8 +26,9 @@ test("social draft approve publish and verify", async ({ page }) => {
   await signIn(page, adminEmail, adminPassword);
   await page.getByRole("link", { name: "Command" }).click();
   await page.getByRole("link", { name: "Approvals" }).click();
-  await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(page.getByTestId("approval-decide-allow")).toBeVisible();
+  await page.getByTestId("approval-decide-allow").first().click();
+  await expect(page.getByTestId("approval-decide-allow")).toHaveCount(0);
 
   await page.getByRole("link", { name: "Nova" }).click();
   await page.getByRole("button", { name: /nova.social.draft/ }).first().click();

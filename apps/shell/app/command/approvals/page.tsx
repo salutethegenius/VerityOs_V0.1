@@ -27,6 +27,9 @@ export default function ApprovalsPage() {
           <button
             key={filter}
             type="button"
+            role="tab"
+            aria-selected={status === filter}
+            aria-label={`Show ${filter} approvals`}
             className={`btn ${status === filter ? "btn-primary" : ""}`}
             onClick={() => setStatus(filter)}
           >
@@ -81,6 +84,7 @@ export default function ApprovalsPage() {
                       <button
                         type="button"
                         className="btn btn-primary"
+                        data-testid="approval-decide-allow"
                         onClick={() =>
                           void decideNovaApproval(row.execution_id, row.id, true, row.artifact_hash!)
                             .then(() => list.reload())

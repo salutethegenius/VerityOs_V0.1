@@ -65,17 +65,32 @@ export default function SourcePage() {
                   <td>{formatTime(v.effective_at ?? v.created_at)}</td>
                   <td className="space-x-2">
                     {can(me?.permissions, "knowledge.approve") && !v.approved_at ? (
-                      <button type="button" className="btn" onClick={() => void act(() => approveVersion(v.id))}>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid="source-approve"
+                        onClick={() => void act(() => approveVersion(v.id))}
+                      >
                         Approve
                       </button>
                     ) : null}
                     {can(me?.permissions, "knowledge.manage") && !v.indexed ? (
-                      <button type="button" className="btn" onClick={() => void act(() => indexVersion(v.id))}>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid="source-index"
+                        onClick={() => void act(() => indexVersion(v.id))}
+                      >
                         Index
                       </button>
                     ) : null}
                     {can(me?.permissions, "knowledge.manage") && v.indexed ? (
-                      <button type="button" className="btn" onClick={() => void act(() => reindexVersion(v.id))}>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid="source-reindex"
+                        onClick={() => void act(() => reindexVersion(v.id))}
+                      >
                         Reindex
                       </button>
                     ) : null}
