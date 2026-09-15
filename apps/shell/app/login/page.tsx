@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api/auth";
 import { CoreApiError } from "@/lib/api/client";
@@ -15,9 +15,11 @@ export default function LoginPage() {
   const [error, setError] = useState<CoreApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (me) {
-    router.replace("/");
-  }
+  useEffect(() => {
+    if (me) {
+      router.replace("/");
+    }
+  }, [me, router]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -32,6 +34,10 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (me) {
+    return null;
   }
 
   return (
