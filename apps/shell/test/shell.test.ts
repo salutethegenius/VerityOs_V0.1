@@ -80,7 +80,8 @@ describe("login redirect source", () => {
     const { readFileSync } = await import("node:fs");
     const source = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
     expect(source).toMatch(/useEffect\(\(\) => \{[\s\S]*router\.replace\("\/"\)/);
-    expect(source).not.toMatch(/if \(me\) \{\s*router\.replace\("\/"\);\s*\}/);
+    const beforeEffect = source.slice(0, source.indexOf("useEffect"));
+    expect(beforeEffect).not.toMatch(/router\.replace/);
   });
 });
 
