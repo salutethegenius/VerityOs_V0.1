@@ -58,6 +58,7 @@ export async function getVerityRecord(
     knowledge_provenance: summary.knowledge,
     model_provenance: summary.model,
     approval_summary: summary.approval,
+    connector_evidence: summary.tool,
     final_ledger_entry: finalEntry,
     integrity_status: "not_verified" as const,
     provenance_status: linked ? ("linked" as const) : graph ? ("unlinked" as const) : ("absent" as const),

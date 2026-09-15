@@ -7,7 +7,7 @@ import {
   type ConnectorHealth,
 } from "./types.js";
 
-const GRAPH_BASE = "https://graph.facebook.com";
+const GRAPH_BASE = process.env.META_GRAPH_BASE ?? "https://graph.facebook.com";
 const DEFAULT_VERSION = "v23.0";
 const MIN_SCHEDULE_OFFSET_SEC = 10 * 60;
 const MAX_SCHEDULE_OFFSET_SEC = 30 * 24 * 60 * 60;

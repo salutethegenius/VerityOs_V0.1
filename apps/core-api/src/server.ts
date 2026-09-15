@@ -9,7 +9,6 @@ import {
   decideApproval,
   evaluatePolicy,
   getPolicy,
-  listPolicies,
   seedDefaultCommand,
 } from "@verityos/command";
 import type { DataClassification, KnowledgeMode, RiskTier } from "@verityos/contracts";
@@ -23,7 +22,6 @@ import {
   createUser,
   destroySession,
   listOrganizationRoles,
-  listOrganizationUsers,
   requirePermission,
   resolveServiceToken,
   resolveSession,
@@ -36,12 +34,10 @@ import {
 import {
   KnowledgeError,
   approveSourceVersion,
-  collectionIdForSource,
   collectionIdForVersion,
   collectionIdsForRetrievalRun,
   createCollection,
   indexSourceVersion,
-  listReadableCollections,
   reindexSourceVersion,
   requireCollectionPermission,
   uploadSourceVersion,
@@ -79,6 +75,29 @@ import {
   healthCheckConnector,
   requestConnectorAction,
 } from "./connectors/gateway.js";
+import {
+  collectionDetail,
+  createNovaInvoker,
+  homeSummary,
+  listApprovals,
+  listBrands,
+  listCollectionsForShell,
+  listCommandSkills,
+  listConnectorsSafe,
+  listPoliciesForShell,
+  listRolesForShell,
+  listUsersForShell,
+  novaRunDetail,
+  novaRuns,
+  novaSkillCatalog,
+  sessionConnectorAction,
+  sessionConnectorHealth,
+  sessionDecideApproval,
+  sessionProfile,
+  sourceDetail,
+  systemStatus,
+  type NovaInvoker,
+} from "./shell.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -122,6 +141,7 @@ export async function buildServer(
     pool?: Pool;
     connectorFetch?: typeof fetch;
     secretResolver?: SecretResolver;
+    novaInvoke?: NovaInvoker;
   } = {}
 ) {
   const config = loadConfig();
@@ -132,6 +152,7 @@ export async function buildServer(
     fetchImpl: options.connectorFetch,
   });
   const connectorSecrets = options.secretResolver ?? envSecretResolver();
+  const novaInvoke = options.novaInvoke ?? createNovaInvoker();
   const app = Fastify({
     logger: false,
     trustProxy: config.trustProxy,
@@ -195,7 +216,7 @@ export async function buildServer(
   app.get("/v1/health", async () => ({
     status: "ok",
     component: "core-api",
-    phase: "9",
+    phase: "10",
   }));
 
   app.post("/v1/auth/login", async (request, reply) => {
@@ -227,12 +248,12 @@ export async function buildServer(
 
   app.get("/v1/auth/me", async (request) => {
     const auth = await requireSession(pool, request);
-    return {
-      user_id: auth.userId,
-      organization_id: auth.organizationId,
-      role: auth.roleName,
-      permissions: auth.permissions,
-    };
+    return sessionProfile(pool, auth);
+  });
+
+  app.get("/v1/me", async (request) => {
+    const auth = await requireSession(pool, request);
+    return sessionProfile(pool, auth);
   });
 
   app.post("/v1/auth/select-organization", async (request) => {
@@ -320,7 +341,7 @@ export async function buildServer(
   app.get("/v1/users", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "users.manage");
-    return { users: await listOrganizationUsers(pool, auth.organizationId) };
+    return { users: await listUsersForShell(pool, auth.organizationId) };
   });
 
   app.post("/v1/users", async (request) => {
@@ -350,13 +371,13 @@ export async function buildServer(
   app.get("/v1/roles", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "roles.manage");
-    return { roles: await listOrganizationRoles(pool, auth.organizationId) };
+    return { roles: await listRolesForShell(pool, auth.organizationId) };
   });
 
   app.get("/v1/policies", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "policies.read");
-    return { policies: await listPolicies(pool, auth.organizationId) };
+    return { policies: await listPoliciesForShell(pool, auth.organizationId) };
   });
 
   app.get("/v1/policies/:policyId", async (request) => {
@@ -520,7 +541,7 @@ export async function buildServer(
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.read");
     return {
-      collections: await listReadableCollections(pool, {
+      collections: await listCollectionsForShell(pool, {
         organizationId: auth.organizationId,
         roleId: auth.roleId,
       }),
@@ -853,24 +874,7 @@ export async function buildServer(
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.read");
     const { sourceId } = request.params as { sourceId: string };
-    const collectionId = await collectionIdForSource(pool, {
-      organizationId: auth.organizationId,
-      sourceId,
-    });
-    await requireCollectionPermission(pool, {
-      organizationId: auth.organizationId,
-      collectionId,
-      roleId: auth.roleId,
-      capability: "can_read",
-    });
-    const source = await pool.query(
-      `SELECT * FROM knowledge.sources WHERE id = $1 AND organization_id = $2`,
-      [sourceId, auth.organizationId]
-    );
-    if (!source.rows[0]) {
-      throw new ApiError(404, "NOT_FOUND", "source not found");
-    }
-    return source.rows[0];
+    return sourceDetail(pool, auth, sourceId);
   });
 
   async function requireScopedExecution(service: ServiceContext, executionId: string) {
@@ -1234,8 +1238,173 @@ export async function buildServer(
       provenance_verified: provenanceVerified,
       integrity_status: verification.valid ? "verified" : "failed",
       provenance_status: provenanceVerified ? "verified" : record.provenance_status,
+      integrity_label: verification.valid ? "Integrity Verified" : "Not Verified",
+      provenance_label: provenanceVerified ? "Provenance Verified" : record.provenance_status === "linked" ? "Linked" : record.provenance_status === "unlinked" ? "Unlinked" : "Not Verified",
       issues: verification.issues,
     };
+  });
+
+  app.get("/v1/home/summary", async (request) => {
+    const auth = await requireSession(pool, request);
+    return homeSummary(pool, auth);
+  });
+
+  app.get("/v1/system/status", async (request) => {
+    const auth = await requireSession(pool, request);
+    return systemStatus(pool, novaInvoke, auth.organizationId);
+  });
+
+  app.get("/v1/command/skills", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "policies.read");
+    return { skills: await listCommandSkills(pool, auth.organizationId) };
+  });
+
+  app.get("/v1/connectors", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "connectors.manage");
+    return { connectors: await listConnectorsSafe(pool, auth.organizationId) };
+  });
+
+  app.post("/v1/connectors/:connectorId/health", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "connectors.manage");
+    const { connectorId } = request.params as { connectorId: string };
+    return sessionConnectorHealth(
+      pool,
+      { registry: connectorRegistry, secrets: connectorSecrets },
+      auth,
+      connectorId
+    );
+  });
+
+  app.get("/v1/approvals", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "approvals.read");
+    const status = (request.query as { status?: string }).status;
+    return { approvals: await listApprovals(pool, auth.organizationId, status) };
+  });
+
+  app.get("/v1/knowledge/collections/:collectionId", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "knowledge.read");
+    const { collectionId } = request.params as { collectionId: string };
+    return collectionDetail(pool, auth, collectionId);
+  });
+
+  app.get("/v1/social/brands", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    return { brands: await listBrands(pool, auth.organizationId) };
+  });
+
+  app.get("/v1/nova/skills", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    const catalog = novaSkillCatalog();
+    if (!novaInvoke) {
+      return { skills: catalog, source: "command" };
+    }
+    try {
+      const live = (await novaInvoke("/internal/v1/skills")) as { skills?: typeof catalog };
+      return { skills: live.skills?.length ? live.skills : catalog, source: "nova" };
+    } catch {
+      return { skills: catalog, source: "command" };
+    }
+  });
+
+  app.post("/v1/nova/skills/:skillId/execute", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    if (!novaInvoke) {
+      throw new ApiError(503, "NOVA_UNAVAILABLE", "Nova runtime is not configured");
+    }
+    const { skillId } = request.params as { skillId: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    if ("actor_id" in body || "organization_id" in body) {
+      throw new ApiError(400, "UNTRUSTED_ACTOR", "actor and organization are derived from the session");
+    }
+    return novaInvoke(`/internal/v1/skills/${encodeURIComponent(skillId)}/execute`, {
+      method: "POST",
+      body: {
+        ...body,
+        actor_id: auth.userId,
+        organization_id: auth.organizationId,
+      },
+    });
+  });
+
+  app.get("/v1/nova/runs", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    return { runs: await novaRuns(pool, auth.organizationId) };
+  });
+
+  app.get("/v1/nova/runs/:executionId", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    const { executionId } = request.params as { executionId: string };
+    return novaRunDetail(pool, auth.organizationId, executionId);
+  });
+
+  app.post("/v1/nova/runs/:executionId/approvals/:approvalId/decide", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "approvals.decide");
+    const { executionId, approvalId } = request.params as { executionId: string; approvalId: string };
+    const body = request.body as { allow?: boolean; artifact_hash?: string };
+    if (typeof body.allow !== "boolean" || !body.artifact_hash) {
+      throw new ApiError(400, "INVALID_INPUT", "allow and artifact_hash are required");
+    }
+    return sessionDecideApproval(pool, auth, executionId, approvalId, body.allow, body.artifact_hash);
+  });
+
+  app.post("/v1/nova/runs/:executionId/publish", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    if (!novaInvoke) {
+      throw new ApiError(503, "NOVA_UNAVAILABLE", "Nova runtime is not configured");
+    }
+    const { executionId } = request.params as { executionId: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    return novaInvoke("/publish", {
+      method: "POST",
+      body: {
+        execution_id: executionId,
+        actor_id: auth.userId,
+        organization_id: auth.organizationId,
+        action: body.action ?? "publish_post",
+        scheduled_for: body.scheduled_for,
+      },
+    });
+  });
+
+  app.post("/v1/executions/:executionId/connectors/actions", async (request) => {
+    const auth = await requireSession(pool, request);
+    requirePermission(auth, "nova.use");
+    const { executionId } = request.params as { executionId: string };
+    const body = request.body as {
+      connector_id?: string;
+      connector_type?: string;
+      action?: string;
+      artifact_hash?: string;
+      payload?: Record<string, unknown>;
+    };
+    if (!body.action || !body.artifact_hash) {
+      throw new ApiError(400, "INVALID_INPUT", "action and artifact_hash are required");
+    }
+    return sessionConnectorAction(
+      pool,
+      { registry: connectorRegistry, secrets: connectorSecrets },
+      auth,
+      executionId,
+      {
+        connector_id: body.connector_id,
+        connector_type: body.connector_type,
+        action: body.action,
+        artifact_hash: body.artifact_hash,
+        payload: body.payload,
+      }
+    );
   });
 
   return { app, pool };

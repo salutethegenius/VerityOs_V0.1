@@ -599,9 +599,11 @@ export function summarizeEvents(events: ExecutionEventRow[]) {
   const knowledge = events.filter((e) => e.event_type.startsWith("knowledge.retrieval"));
   const model = events.filter((e) => e.event_type.startsWith("model."));
   const approval = events.filter((e) => e.event_type.startsWith("approval."));
+  const tool = events.filter((e) => e.event_type.startsWith("tool."));
   return {
     knowledge: knowledge.at(-1)?.metadata ?? null,
     model: model.at(-1)?.metadata ?? null,
     approval: approval.at(-1)?.metadata ?? null,
+    tool: tool.at(-1)?.metadata ?? null,
   };
 }

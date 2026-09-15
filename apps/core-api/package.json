@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint src",
     "start": "node dist/start.js",
+    "seed:dev": "node dist/seed-dev.js",
     "test": "vitest run"
   },
   "dependencies": {

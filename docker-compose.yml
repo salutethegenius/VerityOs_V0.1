@@ -16,5 +16,66 @@ services:
       timeout: 5s
       retries: 5
 
+  core-api:
+    profiles: ["stack"]
+    image: node:20-bookworm
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: bash -lc "pnpm --filter @verityos/core-api start"
+    environment:
+      DATABASE_URL: postgres://verityos:verityos@postgres:5432/verityos_audit
+      PORT: "8080"
+      CORS_ORIGIN: http://127.0.0.1:3000
+      COOKIE_SECURE: "false"
+      VERITY_EMBEDDING_PROVIDER: mock
+      VERITY_DATA_DIR: /tmp/verity-data
+      NOVA_INTERNAL_URL: http://nova:8090
+      NOVA_INTERNAL_TOKEN: ${NOVA_INTERNAL_TOKEN:-}
+      META_GRAPH_BASE: ${META_GRAPH_BASE:-https://graph.facebook.com}
+      META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
+      VERITY_DEPLOYMENT_PROFILE: development
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nova:
+    profiles: ["stack"]
+    image: python:3.12-bookworm
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: bash -lc "pip install -e apps/nova -q && NOVA_DEV_MODE=1 uvicorn verityos_nova.app.main:create_dev_app --factory --host 0.0.0.0 --port 8090"
+    environment:
+      NOVA_DEV_MODE: "1"
+      DATABASE_URL: postgres://verityos:verityos@postgres:5432/verityos_audit
+      CORE_API_URL: http://core-api:8080
+      NOVA_SERVICE_TOKEN: ${NOVA_SERVICE_TOKEN:-}
+      NOVA_ORGANIZATION_ID: ${NOVA_ORGANIZATION_ID:-}
+      NOVA_SYSTEM_ACTOR_ID: ${NOVA_SYSTEM_ACTOR_ID:-}
+      NOVA_INTERNAL_TOKEN: ${NOVA_INTERNAL_TOKEN:-}
+      PYTHONPATH: /workspace/apps/nova/src
+    ports:
+      - "8090:8090"
+    depends_on:
+      - core-api
+
+  shell:
+    profiles: ["stack"]
+    image: node:20-bookworm
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: bash -lc "pnpm --filter @verityos/shell start"
+    environment:
+      CORE_API_URL: http://core-api:8080
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - core-api
+
 volumes:
   verityos_pgdata:

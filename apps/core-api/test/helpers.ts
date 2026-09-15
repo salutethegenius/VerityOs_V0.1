@@ -16,12 +16,17 @@ export function createPool(): pg.Pool {
 
 export async function startApp(
   pool: pg.Pool,
-  extra: { connectorFetch?: typeof fetch; secretResolver?: (ref: string) => string | undefined } = {}
+  extra: {
+    connectorFetch?: typeof fetch;
+    secretResolver?: (ref: string) => string | undefined;
+    novaInvoke?: import("../src/shell.js").NovaInvoker;
+  } = {}
 ): Promise<FastifyInstance> {
   const { app } = await buildServer({
     pool,
     connectorFetch: extra.connectorFetch,
     secretResolver: extra.secretResolver,
+    novaInvoke: extra.novaInvoke,
   });
   return app;
 }

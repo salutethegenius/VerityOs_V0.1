@@ -110,7 +110,7 @@ def create_app(
     slack = slack or FakeSlackClient()
     registry = build_registry(store)
     engine = SkillEngine(client, store) if client else None
-    app = FastAPI(title="VerityOS Nova", version="0.9.0")
+    app = FastAPI(title="VerityOS Nova", version="0.10.0")
     app.state.nova = NovaRuntime(
         organization_id=organization_id or os.environ.get("NOVA_ORGANIZATION_ID") or "",
         system_actor_id=system_actor_id or os.environ.get("NOVA_SYSTEM_ACTOR_ID") or "",
@@ -146,7 +146,7 @@ def create_runtime_app(environ: dict[str, str] | None = None) -> FastAPI:
     slack = HttpSlackClient(cfg["SLACK_BOT_TOKEN"])
     registry = build_registry(store)
     engine = SkillEngine(client, store)
-    app = FastAPI(title="VerityOS Nova", version="0.9.0")
+    app = FastAPI(title="VerityOS Nova", version="0.10.0")
     app.state.nova = NovaRuntime(
         organization_id=cfg["NOVA_ORGANIZATION_ID"],
         system_actor_id=cfg["NOVA_SYSTEM_ACTOR_ID"],
@@ -160,6 +160,61 @@ def create_runtime_app(environ: dict[str, str] | None = None) -> FastAPI:
         internal_token=cfg["NOVA_INTERNAL_TOKEN"],
         runtime_mode=True,
         client=client,
+    )
+    _register_routes(app)
+    return app
+
+
+REQUIRED_DEV_ENV = (
+    "DATABASE_URL",
+    "CORE_API_URL",
+    "NOVA_SERVICE_TOKEN",
+    "NOVA_ORGANIZATION_ID",
+    "NOVA_SYSTEM_ACTOR_ID",
+    "NOVA_INTERNAL_TOKEN",
+)
+
+
+def create_dev_app(
+    environ: dict[str, str] | None = None,
+    *,
+    store: Store | None = None,
+    client: VerityCoreClient | None = None,
+) -> FastAPI:
+    """Local/demo Nova factory. Uses FakeSlackClient; no Slack tokens required.
+
+    Start with::
+
+        NOVA_DEV_MODE=1 uvicorn verityos_nova.app.main:create_dev_app --factory --host 0.0.0.0 --port 8090
+
+    Nova remains single-organization per process (`NOVA_ORGANIZATION_ID`).
+    """
+    source = environ if environ is not None else os.environ
+    if (source.get("NOVA_DEV_MODE") or "").strip() != "1":
+        raise RuntimeConfigError("create_dev_app() requires NOVA_DEV_MODE=1")
+    missing = [name for name in REQUIRED_DEV_ENV if not (source.get(name) or "").strip()]
+    if missing and store is None:
+        raise RuntimeConfigError("Nova dev missing required configuration: " + ", ".join(missing))
+    cfg = {name: (source.get(name) or "").strip() for name in REQUIRED_DEV_ENV}
+    resolved_store = store or PostgresStore(cfg["DATABASE_URL"])
+    resolved_client = client or VerityCoreClient(cfg["CORE_API_URL"], cfg["NOVA_SERVICE_TOKEN"])
+    slack = FakeSlackClient()
+    registry = build_registry(resolved_store)
+    engine = SkillEngine(resolved_client, resolved_store)
+    app = FastAPI(title="VerityOS Nova", version="0.10.0")
+    app.state.nova = NovaRuntime(
+        organization_id=cfg["NOVA_ORGANIZATION_ID"] or (source.get("NOVA_ORGANIZATION_ID") or ""),
+        system_actor_id=cfg["NOVA_SYSTEM_ACTOR_ID"] or (source.get("NOVA_SYSTEM_ACTOR_ID") or ""),
+        registry=registry,
+        engine=engine,
+        store=resolved_store,
+        slack=slack,
+        slack_channel=source.get("SLACK_CONTENT_CHANNEL") or "C-dev",
+        slack_signing_secret="",
+        cron_secret=source.get("CRON_SECRET") or "dev-cron-not-for-production",
+        internal_token=cfg["NOVA_INTERNAL_TOKEN"] or (source.get("NOVA_INTERNAL_TOKEN") or ""),
+        runtime_mode=False,
+        client=resolved_client,
     )
     _register_routes(app)
     return app

@@ -8,14 +8,14 @@ Nova is not VerityOS. Knowledge is not VerityOS. The Audit Kernel is not VerityO
 
 ## Current status
 
-Phase 9: Connector Gateway and governed Meta publishing on the Phase 8 Nova runtime. See [docs/architecture/connectors.md](docs/architecture/connectors.md). Hash Format V2 and Execution Graph V2 hashing are unchanged. Production Content-Loop is not modified.
+Phase 10: Verity Shell over the Phase 9 Connector Gateway and Phase 8 Nova runtime. See [docs/architecture/shell.md](docs/architecture/shell.md). Hash Format V2 and Execution Graph V2 hashing are unchanged. Production Content-Loop is not modified.
 
 Production Nova remains the [Content Loop](https://github.com/salutethegenius/Content-Loop) deployment. This repository does not modify that production system.
 
 ## Layout
 
 ```text
-apps/           core-api, nova runtime, shell stubs; knowledge Python package
+apps/           core-api, nova runtime, Verity Shell; knowledge Python package
 packages/       audit-kernel, identity, command, connectors, model-router, knowledge, contracts, sdks
 db/migrations   single node-pg-migrate history
 tests/          audit tests and Nova behavior fixtures
@@ -31,8 +31,12 @@ pnpm install
 pnpm db:migrate
 pnpm test
 pnpm --filter @verityos/audit-kernel exec vitest run
-pnpm build
+pnpm seed:dev
+pnpm --filter @verityos/shell dev
 ```
+
+Default local login after seed: `admin@verity.local` / `verity-dev-admin` at http://127.0.0.1:3000/login. See [docs/deployment/development.md](docs/deployment/development.md).
+
 
 Offline verification of an evidence bundle (no database):
 
