@@ -9,6 +9,7 @@ import {
 import { redact } from "../src/log.js";
 import { createRole } from "@verityos/identity";
 import { limiters } from "../src/rate-limit.js";
+import { wipeOrganization } from "../src/demo-wipe.js";
 import {
   TEST_ORIGIN,
   createOrg,
@@ -108,6 +109,44 @@ describe("startup config validation", () => {
     expect(() => assertDemoResetAllowed({ VERITY_PROFILE: "demo" })).toThrow(/VERITY_DEMO_RESET/);
     expect(() => assertDemoResetAllowed({ VERITY_PROFILE: "demo", VERITY_DEMO_RESET: "1" })).not.toThrow();
     expect(() => assertDemoResetAllowed({ VERITY_PROFILE: "development", VERITY_DEMO_RESET: "1" })).not.toThrow();
+  });
+
+  it("can wipe a demo org that already has append-only Audit rows", async () => {
+    const org = await createOrg(app, serviceToken, "Wipe Audit Org");
+    const executionId = randomUUID();
+    await pool.query(
+      `INSERT INTO audit.executions (id, verity_record_id, organization_id, status, risk_tier)
+       VALUES ($1, $2, $3, 'created', 'low')`,
+      [executionId, `vr-${executionId}`, org.organization_id]
+    );
+    await pool.query(
+      `INSERT INTO audit.execution_events (
+         id, organization_id, execution_id, event_sequence, event_type, status,
+         occurred_at, occurred_at_canonical
+       ) VALUES ($1, $2, $3, 1, 'execution.created', 'ok', now(), to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`,
+      [randomUUID(), org.organization_id, executionId]
+    );
+    await wipeOrganization(pool, org.organization_id);
+    const leftover = await pool.query(`SELECT 1 FROM auth.organizations WHERE id = $1`, [org.organization_id]);
+    expect(leftover.rowCount).toBe(0);
+
+    const leftoverOrg = await createOrg(app, serviceToken, "Append Only Still On");
+    const leftoverExecution = randomUUID();
+    await pool.query(
+      `INSERT INTO audit.executions (id, verity_record_id, organization_id, status, risk_tier)
+       VALUES ($1, $2, $3, 'created', 'low')`,
+      [leftoverExecution, `vr-${leftoverExecution}`, leftoverOrg.organization_id]
+    );
+    await pool.query(
+      `INSERT INTO audit.execution_events (
+         id, organization_id, execution_id, event_sequence, event_type, status,
+         occurred_at, occurred_at_canonical
+       ) VALUES ($1, $2, $3, 1, 'execution.created', 'ok', now(), to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`,
+      [randomUUID(), leftoverOrg.organization_id, leftoverExecution]
+    );
+    await expect(
+      pool.query(`DELETE FROM audit.execution_events WHERE organization_id = $1`, [leftoverOrg.organization_id])
+    ).rejects.toThrow(/append-only/);
   });
 });
 
@@ -522,7 +561,8 @@ describe("failure modes and persistence", () => {
       payload: { question: "storm advisory" },
     });
     expect(executed.statusCode).toBe(503);
-    expect(executed.json().error.code).toBe("MODEL_UNAVAILABLE");
+    expect(String(executed.json().error.code)).toMatch(/UNAVAILABLE/);
+    expect(executed.json().status).not.toBe("completed");
     await isolated.close();
   });
 

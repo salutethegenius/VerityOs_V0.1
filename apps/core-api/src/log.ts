@@ -18,10 +18,11 @@ export function redact(value: unknown): unknown {
 }
 
 export function logEvent(event: Record<string, unknown>): void {
+  const redacted = redact(event) as Record<string, unknown>;
   const line = {
     ts: new Date().toISOString(),
     service: "core-api",
-    ...redact(event),
+    ...redacted,
   };
   process.stdout.write(`${JSON.stringify(line)}\n`);
 }

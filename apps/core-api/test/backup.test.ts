@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { TEST_DATABASE_URL } from "./helpers.js";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("backup manifest", () => {
   it("writes SHA-256 hashes that match the dump files", () => {
     const dest = mkdtempSync(join(tmpdir(), "verity-backup-"));
-    const result = spawnSync("bash", ["scripts/backup.sh", dest], {
+    const result = spawnSync("bash", [join(ROOT, "scripts/backup.sh"), dest], {
       encoding: "utf8",
+      cwd: ROOT,
       env: {
         ...process.env,
         DATABASE_URL: TEST_DATABASE_URL,

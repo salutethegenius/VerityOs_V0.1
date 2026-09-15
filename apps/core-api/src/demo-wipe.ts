@@ -26,10 +26,21 @@ const DELETE_ORDER = [
   "audit.merkle_checkpoints",
 ];
 
+/** Append-only Audit tables. Disabled only inside a demo/dev org wipe transaction. */
+const APPEND_ONLY_TRIGGERS = [
+  { table: "audit.execution_events", trigger: "execution_events_reject_update_delete" },
+  { table: "audit.ledger_entries", trigger: "ledger_entries_reject_update_delete" },
+  { table: "audit.merkle_checkpoints", trigger: "merkle_checkpoints_reject_update_delete" },
+] as const;
+
 export async function wipeOrganization(pool: Pool, organizationId: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Demo/dev reset only: recreate the synthetic org. Not a production evidence-deletion API.
+    for (const { table, trigger } of APPEND_ONLY_TRIGGERS) {
+      await client.query(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
+    }
     for (const table of DELETE_ORDER) {
       await client.query(`DELETE FROM ${table} WHERE organization_id = $1`, [organizationId]);
     }
@@ -60,6 +71,9 @@ export async function wipeOrganization(pool: Pool, organizationId: string): Prom
       }
     }
     await client.query(`DELETE FROM auth.organizations WHERE id = $1`, [organizationId]);
+    for (const { table, trigger } of APPEND_ONLY_TRIGGERS) {
+      await client.query(`ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`);
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

@@ -6,6 +6,7 @@ import {
   listExecutions,
 } from "@verityos/audit-kernel";
 import { decideExecutionApproval } from "./execution/lifecycle.js";
+import { finalizeGovernedExecution } from "./execution/service.js";
 import { getVerityRecord, listVerityRecords } from "./execution/records.js";
 import { requestConnectorAction, healthCheckConnector } from "./connectors/gateway.js";
 import { ApiError } from "./errors.js";
@@ -557,7 +558,7 @@ export async function sessionConnectorAction(
     payload?: Record<string, unknown>;
   }
 ) {
-  return requestConnectorAction(pool, deps, {
+  const result = await requestConnectorAction(pool, deps, {
     organizationId: auth.organizationId,
     executionId,
     actorId: auth.userId,
@@ -567,6 +568,26 @@ export async function sessionConnectorAction(
     artifactHash: body.artifact_hash,
     payload: body.payload ?? {},
   });
+  const status = (result as { status?: string }).status;
+  if (status === "succeeded") {
+    const execution = await getExecution(pool, auth.organizationId, executionId);
+    if (execution && !["completed", "failed", "blocked", "cancelled"].includes(execution.status)) {
+      try {
+        await finalizeGovernedExecution(pool, {
+          executionId,
+          organizationId: auth.organizationId,
+          outcome: "completed",
+          response: { connector_action: status },
+        });
+      } catch (err) {
+        const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+        if (code !== "INVALID_EXECUTION_TRANSITION") {
+          throw err;
+        }
+      }
+    }
+  }
+  return result;
 }
 
 export async function sessionConnectorHealth(

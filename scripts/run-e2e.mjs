@@ -59,9 +59,10 @@ process.on("SIGTERM", shutdown);
 
 function killLeftovers() {
   try {
-    execSync("pkill -f 'next-server \\(v' || true; pkill -f 'playwright test' || true; pkill -f 'meta-mock.mjs' || true; pkill -f 'apps/core-api/dist/start.js' || true; pkill -f 'verityos_nova.app.main' || true", {
-      stdio: "ignore",
-    });
+    execSync(
+      "pkill -f 'next-server \\(v' || true; pkill -f 'playwright test' || true; pkill -f 'meta-mock.mjs' || true; pkill -f 'apps/core-api/dist/start.js' || true; pkill -f 'verityos_nova.app.main' || true; fuser -k 3000/tcp 8080/tcp 8090/tcp 8099/tcp 2>/dev/null || true",
+      { stdio: "ignore" }
+    );
   } catch {
     // no leftover processes
   }

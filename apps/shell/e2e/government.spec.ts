@@ -81,6 +81,6 @@ test("analyst cannot invoke social draft or connector publish", async ({ page })
   await page.getByRole("tab", { name: "Social Draft" }).click();
   await page.getByLabel("Brand").selectOption({ label: "Demo Civil Protection" });
   await page.getByRole("button", { name: "Generate draft" }).click();
-  await expect(page.getByRole("alert")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("missing permission social.draft")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Publish Now" })).toHaveCount(0);
 });

@@ -13,6 +13,8 @@
 
 Audit / ledger evidence must not be selectively tampered with. The **demo reset** (`pnpm demo:reset`) destroys and recreates the **synthetic demo organization only**, and only when `VERITY_PROFILE` is `demo` or `development` **and** `VERITY_DEMO_RESET=1`. It is not a production retention tool.
 
+Resetting an existing demo org temporarily disables the Audit append-only DELETE triggers **inside that transaction** so the org can be destroyed as a unit. Triggers are re-enabled before commit. This is not an operator API for deleting evidence in sovereign/production profiles.
+
 ## Secret rotation (documentation only — do not rotate production secrets in Phase 11)
 
 | Secret | Procedure |

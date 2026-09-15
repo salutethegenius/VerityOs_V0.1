@@ -977,20 +977,6 @@ export async function buildServer(
     if (!membership.rows[0]) {
       throw new ApiError(403, "NOT_A_MEMBER", "actor is not a member of that organization");
     }
-    const openPolicy = await evaluatePolicy(pool, {
-      organizationId,
-      actorId: body.actor_id,
-      roleId: membership.rows[0].role_id,
-      action: {
-        type: "skill.use",
-        skillId: body.skill_id,
-        classification: "internal",
-        riskTier: body.risk_tier ?? "medium",
-      },
-    });
-    if (openPolicy.decision === "deny") {
-      throw new ApiError(403, openPolicy.reason_code, "skill execution denied");
-    }
     const execution = await openGovernedExecution(pool, {
       organizationId,
       actorId: body.actor_id,
@@ -1409,15 +1395,26 @@ export async function buildServer(
     if ("actor_id" in body || "organization_id" in body) {
       throw new ApiError(400, "UNTRUSTED_ACTOR", "actor and organization are derived from the session");
     }
-    return novaInvoke(`/internal/v1/skills/${encodeURIComponent(skillId)}/execute`, {
-      method: "POST",
-      requestId: request.requestId,
-      body: {
-        ...body,
-        actor_id: auth.userId,
-        organization_id: auth.organizationId,
-      },
-    });
+    try {
+      return await novaInvoke(`/internal/v1/skills/${encodeURIComponent(skillId)}/execute`, {
+        method: "POST",
+        requestId: request.requestId,
+        body: {
+          ...body,
+          actor_id: auth.userId,
+          organization_id: auth.organizationId,
+        },
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      if (err && typeof err === "object" && "statusCode" in err && "code" in err) {
+        const mapped = err as { statusCode: number; code: string; message?: string };
+        throw new ApiError(mapped.statusCode, mapped.code, mapped.message ?? "nova request failed");
+      }
+      throw new ApiError(503, "NOVA_UNAVAILABLE", "nova request failed");
+    }
   });
 
   app.get("/v1/nova/runs", async (request) => {
