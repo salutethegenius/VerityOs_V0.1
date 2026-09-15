@@ -397,10 +397,14 @@ export async function listApprovals(pool: Pool, organizationId: string, status?:
   const result = await pool.query(
     `SELECT a.id, a.execution_id, a.skill_id, a.requested_by, a.decided_by, a.status,
             a.reason_code, a.artifact_hash, a.created_at, a.decided_at,
-            e.risk_tier, e.verity_record_id, e.status AS execution_status
+            e.risk_tier, e.verity_record_id, e.status AS execution_status,
+            ru.display_name AS requested_by_name, ru.email AS requested_by_email,
+            du.display_name AS decided_by_name, du.email AS decided_by_email
      FROM command.approvals a
      JOIN audit.executions e
        ON e.id = a.execution_id AND e.organization_id = a.organization_id
+     LEFT JOIN auth.users ru ON ru.id = a.requested_by
+     LEFT JOIN auth.users du ON du.id = a.decided_by
      WHERE a.organization_id = $1
        AND ($2::text IS NULL OR a.status = $2)
      ORDER BY a.created_at DESC`,
@@ -515,10 +519,14 @@ export async function novaRunDetail(pool: Pool, organizationId: string, executio
     [organizationId, executionId]
   );
   const approval = await pool.query(
-    `SELECT id, status, artifact_hash, requested_by, decided_by, created_at, decided_at
-     FROM command.approvals
-     WHERE organization_id = $1 AND execution_id = $2
-     ORDER BY created_at DESC LIMIT 1`,
+    `SELECT a.id, a.status, a.artifact_hash, a.requested_by, a.decided_by, a.created_at, a.decided_at,
+            ru.display_name AS requested_by_name, ru.email AS requested_by_email,
+            du.display_name AS decided_by_name, du.email AS decided_by_email
+     FROM command.approvals a
+     LEFT JOIN auth.users ru ON ru.id = a.requested_by
+     LEFT JOIN auth.users du ON du.id = a.decided_by
+     WHERE a.organization_id = $1 AND a.execution_id = $2
+     ORDER BY a.created_at DESC LIMIT 1`,
     [organizationId, executionId]
   );
   return {
@@ -533,7 +541,49 @@ export async function novaRunDetail(pool: Pool, organizationId: string, executio
     record,
     social_item: item.rows[0] ?? null,
     approval: approval.rows[0] ?? null,
+    citations: await citationsFromRetrievalEvents(pool, organizationId, events),
   };
+}
+
+async function citationsFromRetrievalEvents(
+  pool: Pool,
+  organizationId: string,
+  events: Array<{ event_type: string; metadata: Record<string, unknown> | null }>
+) {
+  const retrieval = [...events]
+    .reverse()
+    .find(
+      (event) =>
+        event.event_type === "knowledge.retrieval.completed" ||
+        event.event_type === "knowledge.retrieval.insufficient"
+    );
+  if (!retrieval?.metadata) {
+    return [];
+  }
+  const chunkIds = Array.isArray(retrieval.metadata.chunk_ids)
+    ? retrieval.metadata.chunk_ids.filter((id): id is string => typeof id === "string")
+    : [];
+  if (chunkIds.length === 0) {
+    return [];
+  }
+  const rows = await pool.query<{
+    source_id: string;
+    source_version_id: string;
+    title: string;
+    chunk_count: number;
+  }>(
+    `SELECT s.id AS source_id, v.id AS source_version_id, s.title, COUNT(*)::int AS chunk_count
+     FROM knowledge.chunks c
+     JOIN knowledge.source_versions v
+       ON v.id = c.source_version_id AND v.organization_id = c.organization_id
+     JOIN knowledge.sources s
+       ON s.id = v.source_id AND s.organization_id = c.organization_id
+     WHERE c.organization_id = $1 AND c.id = ANY($2::uuid[])
+     GROUP BY s.id, v.id, s.title
+     ORDER BY s.title`,
+    [organizationId, chunkIds]
+  );
+  return rows.rows;
 }
 
 export async function listBrands(pool: Pool, organizationId: string) {

@@ -37,7 +37,11 @@ export default function LoginPage() {
   }
 
   if (me) {
-    return null;
+    return (
+      <p className="p-8 text-sm text-muted" role="status">
+        Already signed in. Returning to Home…
+      </p>
+    );
   }
 
   return (

@@ -18,6 +18,8 @@ test("login failure then research verify workflow", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(page.getByText("approved sources only")).toBeVisible();
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 
   await page.getByRole("link", { name: "Knowledge" }).click();
   await page.getByLabel("Collection name").fill(collectionName);
@@ -39,7 +41,7 @@ test("login failure then research verify workflow", async ({ page }) => {
   await page.getByRole("link", { name: "Nova" }).click();
   await page.getByRole("tab", { name: "Research" }).click();
   await page.getByLabel("Question").fill("What is the capital of France?");
-  await page.getByLabel("Knowledge mode").selectOption("grounded");
+  await page.getByLabel("Knowledge mode").selectOption({ value: "grounded" });
   await page.getByRole("checkbox", { name: collectionName }).check();
   await page.getByRole("button", { name: "Run research" }).click();
   await expect(page.getByTestId("verity-record-link")).toBeVisible({ timeout: 60_000 });

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from "@/
 import { useAsync } from "@/lib/useAsync";
 import { CoreApiError } from "@/lib/api/client";
 import { formatTime } from "@/lib/format";
+import { KnowledgeLegend } from "@/components/KnowledgeLegend";
 
 export default function CollectionPage() {
   const params = useParams<{ id: string }>();
@@ -33,8 +34,9 @@ export default function CollectionPage() {
     <div>
       <PageHeader
         title={collection?.name ?? "Collection"}
-        description="Sources in this collection. Approved versions are the only trusted institutional evidence."
+        description="Sources in this collection. Only approved versions are trusted institutional evidence."
       />
+      <KnowledgeLegend />
       {detail.loading ? <LoadingState /> : null}
       {detail.error ? (
         <ErrorState message={detail.error.message} requestId={detail.error.requestId} onRetry={() => void detail.reload()} />
@@ -87,8 +89,10 @@ export default function CollectionPage() {
                 <td>{s.version_count}</td>
                 <td>
                   <StatusPill
-                    label={s.approved_versions > 0 ? "Approved" : "Uploaded"}
-                    tone={s.approved_versions > 0 ? "ok" : "neutral"}
+                    label={
+                      s.approved_versions > 0 ? "Approved" : s.indexed_chunks > 0 ? "Indexed" : "Uploaded"
+                    }
+                    tone={s.approved_versions > 0 ? "ok" : s.indexed_chunks > 0 ? "accent" : "neutral"}
                   />
                 </td>
                 <td>{s.indexed_chunks}</td>

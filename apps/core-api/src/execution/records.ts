@@ -10,17 +10,31 @@ import { ExecutionError, summarizeEvents } from "./service.js";
 
 export async function listVerityRecords(pool: Pool, organizationId: string) {
   const executions = await listExecutions(pool, organizationId);
-  return executions.map((row) => ({
-    verity_record_id: row.verity_record_id,
-    execution_id: row.id,
-    actor_id: row.actor_id,
-    skill_id: row.skill_id,
-    risk_tier: row.risk_tier,
-    status: row.status,
-    policy_version: row.policy_version,
-    started_at: row.started_at,
-    completed_at: row.completed_at,
-  }));
+  const actorIds = [...new Set(executions.map((row) => row.actor_id).filter(Boolean))] as string[];
+  const actors =
+    actorIds.length === 0
+      ? { rows: [] as Array<{ id: string; display_name: string; email: string }> }
+      : await pool.query<{ id: string; display_name: string; email: string }>(
+          `SELECT id, display_name, email FROM auth.users WHERE id = ANY($1::uuid[])`,
+          [actorIds]
+        );
+  const byId = new Map(actors.rows.map((row) => [row.id, row]));
+  return executions.map((row) => {
+    const actor = row.actor_id ? byId.get(row.actor_id) : undefined;
+    return {
+      verity_record_id: row.verity_record_id,
+      execution_id: row.id,
+      actor_id: row.actor_id,
+      actor_name: actor?.display_name ?? null,
+      actor_email: actor?.email ?? null,
+      skill_id: row.skill_id,
+      risk_tier: row.risk_tier,
+      status: row.status,
+      policy_version: row.policy_version,
+      started_at: row.started_at,
+      completed_at: row.completed_at,
+    };
+  });
 }
 
 export async function getVerityRecord(
@@ -47,10 +61,19 @@ export async function getVerityRecord(
     Boolean(finalEntry?.execution_graph_hash) &&
     graphHash === finalEntry.execution_graph_hash;
   const summary = summarizeEvents(events);
+  const actor =
+    execution.actor_id
+      ? await pool.query<{ display_name: string; email: string }>(
+          `SELECT display_name, email FROM auth.users WHERE id = $1`,
+          [execution.actor_id]
+        )
+      : { rows: [] };
   return {
     verity_record_id: execution.verity_record_id,
     execution_id: execution.id,
     actor: execution.actor_id,
+    actor_name: actor.rows[0]?.display_name ?? null,
+    actor_email: actor.rows[0]?.email ?? null,
     skill: execution.skill_id,
     risk: execution.risk_tier,
     status: execution.status,

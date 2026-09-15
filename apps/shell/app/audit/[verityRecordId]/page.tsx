@@ -6,6 +6,7 @@ import { exportEvidence, getGraph, getRecord, verifyRecord } from "@/lib/api/aud
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, StatusPill } from "@/components/ui";
 import { HashValue } from "@/components/HashValue";
 import { eventLabel, formatTime } from "@/lib/format";
+import { skillLabel } from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -70,7 +71,7 @@ export default function RecordPage() {
       />
       <p className="mb-4 max-w-3xl text-sm text-muted">
         Integrity verification confirms that recorded evidence has not changed. Provenance shows the recorded path that
-        produced the result. Neither alone proves factual truth.
+        produced the result. Neither proves factual truth. Do not read these labels as Fact Verified or Truth Verified.
       </p>
       {record.loading ? <LoadingState /> : null}
       {record.error ? (
@@ -108,19 +109,19 @@ export default function RecordPage() {
         <dl className="mb-6 grid gap-3 text-sm md:grid-cols-2">
           <Field label="Verity Record ID" value={record.data.verity_record_id} mono />
           <Field label="Execution ID" value={record.data.execution_id} mono />
-          <Field label="Actor" value={record.data.actor} mono />
-          <Field label="Skill" value={record.data.skill} />
+          <Field label="Actor" value={record.data.actor_name || record.data.actor_email || record.data.actor} />
+          <Field label="Skill" value={skillLabel(record.data.skill)} />
           <Field label="Risk" value={record.data.risk} />
           <Field label="Status" value={record.data.status} />
           <Field label="Policy version" value={String(record.data.policy_version ?? "—")} />
           <div>
-            <dt className="text-muted">execution_graph_hash</dt>
+            <dt className="text-muted">Execution graph hash</dt>
             <dd>
               <HashValue value={record.data.execution_graph_hash} label="graph hash" />
             </dd>
           </div>
           <div>
-            <dt className="text-muted">entry_hash</dt>
+            <dt className="text-muted">Ledger entry hash</dt>
             <dd>
               <HashValue
                 value={

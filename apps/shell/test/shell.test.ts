@@ -34,8 +34,10 @@ describe("permission-aware navigation", () => {
 
 describe("display helpers", () => {
   it("shortens hashes and maps connector states", () => {
+    expect(shortHash("VTY-2026-A1B2C3D4")).toBe("VTY-2026-A1B2C3D4");
     expect(shortHash("a".repeat(64))).toContain("…");
     expect(connectorStateLabel("needs_review")).toBe("Needs review");
+    expect(connectorStateLabel("pending_approval")).toBe("Awaiting approval");
     expect(connectorStateLabel("posted")).toBe("Published");
     expect(connectorStateLabel("failed")).toBe("Failed");
     expect(sourceTrustState({ approved_at: null, indexed: false })).toBe("Uploaded");
@@ -47,6 +49,51 @@ describe("display helpers", () => {
     const sealed = "official artifact";
     const local = "official artifact (edited)";
     expect(local !== sealed).toBe(true);
+  });
+});
+
+describe("operator display", () => {
+  it("dedupes citation titles without dropping chunk counts", async () => {
+    const { citationsForDisplay, dedupeCitations } = await import("../lib/operator-display");
+    const visible = dedupeCitations([
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c1" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c2" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c3" },
+      { title: "Shelter Guide", source_version_id: "v2", chunk_id: "c4" },
+    ]);
+    expect(visible).toHaveLength(2);
+    expect(visible[0]).toMatchObject({ title: "Public Emergency Advisory Guidance", chunkCount: 3 });
+    expect(visible[1]).toMatchObject({ title: "Shelter Guide", chunkCount: 1 });
+
+    const execute = [
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c1" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c2" },
+    ];
+    const detail = [{ title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_count: 2 }];
+    expect(dedupeCitations(citationsForDisplay(execute, detail))).toEqual([
+      expect.objectContaining({ title: "Public Emergency Advisory Guidance", chunkCount: 2 }),
+    ]);
+    expect(dedupeCitations(citationsForDisplay(execute, []))).toHaveLength(1);
+  });
+
+  it("labels mock adapter output without rewriting the recorded artifact", async () => {
+    const { presentMockArtifact } = await import("../lib/operator-display");
+    const recorded = "mock:mock-local:SYSTEM: You are VerityOS";
+    expect(presentMockArtifact(recorded)).toEqual({ mock: true, recorded });
+    expect(presentMockArtifact("Paris is the capital of France.")).toEqual({
+      mock: false,
+      recorded: "Paris is the capital of France.",
+    });
+  });
+});
+
+describe("login redirect source", () => {
+  it("navigates authenticated users from /login inside useEffect", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/useEffect\(\(\) => \{[\s\S]*router\.replace\("\/"\)/);
+    const beforeEffect = source.slice(0, source.indexOf("useEffect"));
+    expect(beforeEffect).not.toMatch(/router\.replace/);
   });
 });
 

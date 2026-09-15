@@ -10,7 +10,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/nova", label: "Nova", permission: "nova.use" },
   { href: "/knowledge", label: "Knowledge", permission: "knowledge.read" },
   {
-    href: "/command/users",
+    href: "/command",
     label: "Command",
     anyOf: [
       "users.manage",

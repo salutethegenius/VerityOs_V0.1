@@ -8,7 +8,11 @@ export default function UsersPage() {
   const list = useAsync(() => listUsers(), []);
   return (
     <div>
-      <PageHeader title="Users" description="Organization members. Backend authorization remains authoritative." />
+      <PageHeader
+        title="Users"
+        description="Organization members. This list is read-only in V0.1."
+      />
+      <p className="mb-4 text-sm text-muted">User provisioning is operator-assisted in V0.1. This page is not missing controls because of an error.</p>
       {list.loading ? <LoadingState /> : null}
       {list.error ? <ErrorState message={list.error.message} requestId={list.error.requestId} onRetry={() => void list.reload()} /> : null}
       {list.data?.users.length === 0 ? (

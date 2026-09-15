@@ -15,23 +15,27 @@ pnpm install
 pnpm db:migrate
 pnpm build
 VERITY_PROFILE=demo VERITY_DEMO_RESET=1 pnpm demo:reset
-# passwords print once; also tmp/verity-demo-seed.json
+# passwords print once
+# seed file is always repo-root tmp/verity-demo-seed.json (absolute path printed)
+# Nova tokens are in that file, not stdout
 pnpm demo:check   # after Core/Nova/Shell are up
 ```
 
-Start Core, Nova (`NOVA_DEV_MODE=1`), Shell, and `node scripts/meta-mock.mjs` as in [development.md](../deployment/development.md), using the demo seed tokens (`NOVA_*` from `tmp/verity-demo-seed.json`). Point `META_GRAPH_BASE` at the mock.
+Start Core, Nova (`NOVA_DEV_MODE=1`), Shell, and `node scripts/meta-mock.mjs` as in [development.md](../deployment/development.md), using the demo seed tokens (`NOVA_*` from repo-root `tmp/verity-demo-seed.json`). Point `META_GRAPH_BASE` at the mock.
 
 Fallback if the mock model or mock Meta is down: still log in and show Knowledge + Audit of prior records; do not improvise a live publish. Say “external action is mocked in this candidate.”
 
 ## Roles (obvious demo emails)
 
+Workflow: Communications Officer drafts → Director approves → Analyst researches.
+
 | Role | Email (default) | What they can do |
 | --- | --- | --- |
-| Director | `director@verity-demo.local` | Admin, approve, publish, verify |
-| Communications Officer | `communications@verity-demo.local` | Draft, request approval, cannot self-approve |
+| Communications Officer | `communications@verity-demo.local` | Draft using approved Knowledge; request approval; cannot self-approve |
+| Director | `director@verity-demo.local` | Approve exact artifact, publish through mock Meta, verify records |
 | Analyst | `analyst@verity-demo.local` | Research only; cannot social-draft or publish |
 
-Passwords are printed once at seed. Development profile uses documented demo passwords; demo profile generates them.
+Passwords are printed once at seed. Development profile uses documented demo passwords (`verity-demo-officer`, `verity-demo-director`, `verity-demo-analyst`). Demo profile generates them unless overridden. All seeded documents remain **SYNTHETIC DEMO DOCUMENT / NOT OFFICIAL GOVERNMENT POLICY**.
 
 ## Click-by-click
 
@@ -43,7 +47,7 @@ Passwords are printed once at seed. Development profile uses documented demo pas
 
 4. Check **Institutional Guidance (Synthetic Demo)**. Generate draft.
 5. Point at citations (approved source versions) and the sealed artifact hash. Explain Model Router selected the allowed mock/local model.
-6. Status is pending approval. Log out.
+6. Status is **Awaiting approval**. Log out.
 7. Sign in as Director. Command → Approvals. Show the **exact** artifact / hash. Approve.
 8. Nova → open the same run → **Publish Now** (mock Meta). Confirm **Published**.
 9. Audit → open the Verity Record → **Verify Record**. Show **Integrity Verified** and **Provenance Verified**.

@@ -111,6 +111,15 @@ describe("startup config validation", () => {
     expect(() => assertDemoResetAllowed({ VERITY_PROFILE: "development", VERITY_DEMO_RESET: "1" })).not.toThrow();
   });
 
+  it("resolves seed files against the repository root, not apps/core-api cwd", async () => {
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { repoRootFromModuleUrl } = await import("../src/seed-paths.js");
+    const root = repoRootFromModuleUrl();
+    expect(existsSync(join(root, "pnpm-workspace.yaml"))).toBe(true);
+    expect(root.endsWith("apps/core-api")).toBe(false);
+  });
+
   it("can wipe a demo org that already has append-only Audit rows", async () => {
     const org = await createOrg(app, serviceToken, "Wipe Audit Org");
     const executionId = randomUUID();

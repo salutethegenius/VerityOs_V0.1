@@ -59,7 +59,7 @@ export const CONNECTOR_STATE_LABELS: Record<string, string> = {
   failed: "Failed",
   error: "Failed",
   denied: "Failed",
-  pending_approval: "Pending approval",
+  pending_approval: "Awaiting approval",
   rejected: "Rejected",
 };
 

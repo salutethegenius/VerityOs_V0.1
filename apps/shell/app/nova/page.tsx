@@ -15,11 +15,19 @@ import { listCollections } from "@/lib/api/knowledge";
 import { CoreApiError } from "@/lib/api/client";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, StatusPill } from "@/components/ui";
 import { HashValue } from "@/components/HashValue";
-import { connectorStateLabel, formatTime } from "@/lib/format";
+import { connectorStateLabel, formatTime, shortHash } from "@/lib/format";
+import {
+  actorDisplay,
+  citationsForDisplay,
+  dedupeCitations,
+  executionStatusLabel,
+  presentMockArtifact,
+  skillLabel,
+} from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import type { NovaExecuteResult, NovaRunDetail } from "@/lib/api/types";
+import type { Citation, NovaExecuteResult, NovaRunDetail } from "@/lib/api/types";
 
 const SKILL_TABS = [
   { id: "nova.research", label: "Research" },
@@ -72,7 +80,7 @@ export default function NovaPage() {
 
   return (
     <div>
-      <PageHeader title="Nova" description="Operator workspace. Skills execute through Core; this browser never calls Nova internally." />
+      <PageHeader title="Nova" description="Operator workspace. Skills execute through Core. This browser never calls Nova internals." />
       {skills.loading ? <LoadingState label="Loading skills" /> : null}
       {skills.error ? <ErrorState message={skills.error.message} requestId={skills.error.requestId} onRetry={() => void skills.reload()} /> : null}
       <div className="grid gap-4 xl:grid-cols-[220px_1fr_280px]">
@@ -101,8 +109,8 @@ export default function NovaPage() {
                       void loadRun(run.execution_id);
                     }}
                   >
-                    <span className="block font-medium">{run.skill_id}</span>
-                    <span className="text-xs text-muted">{run.status} · {formatTime(run.started_at)}</span>
+                    <span className="block font-medium">{skillLabel(run.skill_id)}</span>
+                    <span className="text-xs text-muted">{executionStatusLabel(run.status)} · {formatTime(run.started_at)}</span>
                   </button>
                 </li>
               ))}
@@ -160,6 +168,7 @@ export default function NovaPage() {
             sealed={sealed}
             onEdit={setDraftEdit}
             canApprove={can(me?.permissions, "approvals.decide")}
+            actorId={me?.user_id}
             onDecide={async (allow) => {
               if (!detail?.approval?.id || !detail.approval.artifact_hash) return;
               setBusy(true);
@@ -172,6 +181,7 @@ export default function NovaPage() {
                 setBusy(false);
               }
             }}
+            brands={brands.data?.brands ?? []}
             onPublish={async (action, scheduledFor) => {
               if (!detail?.social_item) return;
               setBusy(true);
@@ -196,7 +206,7 @@ export default function NovaPage() {
           <dl className="mt-3 space-y-2 text-sm">
             <div>
               <dt className="text-muted">Status</dt>
-              <dd>{governance.status ?? "—"}</dd>
+              <dd>{executionStatusLabel(governance.status)}</dd>
             </div>
             <div>
               <dt className="text-muted">Verity Record</dt>
@@ -207,7 +217,7 @@ export default function NovaPage() {
                     href={`/audit/${governance.recordId}`}
                     data-testid="verity-record-link"
                   >
-                    {governance.recordId.slice(0, 8)}
+                    {shortHash(governance.recordId)}
                   </Link>
                 ) : (
                   "—"
@@ -217,15 +227,13 @@ export default function NovaPage() {
             <div>
               <dt className="text-muted">Citations</dt>
               <dd>
-                {(result?.citations ?? []).length === 0 ? (
-                  "None"
-                ) : (
-                  <ul className="list-disc pl-4" data-testid="nova-citations">
-                    {result?.citations?.map((c, i) => (
-                      <li key={i}>{c.title ?? c.source_id ?? "source"}{c.page ? ` p.${c.page}` : ""}</li>
-                    ))}
-                  </ul>
-                )}
+                <CitationList
+                  citations={citationsForDisplay(result?.citations, detail?.citations)}
+                  recordId={governance.recordId}
+                  hadRetrieval={Boolean(
+                    detail?.events.some((event) => event.event_type.startsWith("knowledge.retrieval"))
+                  )}
+                />
               </dd>
             </div>
           </dl>
@@ -260,9 +268,9 @@ function ResearchForm({
       <label className="field">
         Knowledge mode
         <select value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="strict">strict</option>
-          <option value="grounded">grounded</option>
-          <option value="general">general</option>
+          <option value="strict">strict — approved evidence only</option>
+          <option value="grounded">grounded — cite approved sources</option>
+          <option value="general">general — may answer without citations</option>
         </select>
       </label>
       <fieldset className="field">
@@ -326,9 +334,9 @@ function DraftingForm({
       <label className="field">
         Knowledge mode
         <select value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="strict">strict</option>
-          <option value="grounded">grounded</option>
-          <option value="general">general</option>
+          <option value="strict">strict — approved evidence only</option>
+          <option value="grounded">grounded — cite approved sources</option>
+          <option value="general">general — may answer without citations</option>
         </select>
       </label>
       <fieldset className="field">
@@ -434,6 +442,8 @@ function ResultPane({
   sealed,
   onEdit,
   canApprove,
+  actorId,
+  brands,
   onDecide,
   onPublish,
 }: {
@@ -445,12 +455,16 @@ function ResultPane({
   sealed: string;
   onEdit: (value: string) => void;
   canApprove: boolean;
+  actorId?: string;
+  brands: Array<{ brand_id: string; display_name: string }>;
   onDecide: (allow: boolean) => Promise<void>;
   onPublish: (action: "publish_post" | "schedule_post", scheduledFor?: string) => Promise<void>;
 }) {
   const [schedule, setSchedule] = useState("");
   const status = result?.status ?? detail?.execution.status;
   const artifact = draftEdit ?? sealed;
+  const execLabel = executionStatusLabel(status);
+  const socialLabel = detail?.social_item ? connectorStateLabel(detail.social_item.status) : null;
   if (!result && !detail) {
     return <EmptyState title="No result yet" body="Run a skill or open a previous execution." />;
   }
@@ -461,32 +475,29 @@ function ResultPane({
           Insufficient approved evidence
         </div>
       ) : null}
-      {result?.status === "blocked" ? (
-        <p className="mb-3 text-sm font-medium text-warn">Insufficient approved evidence</p>
-      ) : null}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <StatusPill label={status ?? "unknown"} />
+        <StatusPill label={execLabel} />
         {unsealed ? <StatusPill label="Unsealed local edit" tone="warn" /> : null}
-        {detail?.social_item ? <StatusPill label={connectorStateLabel(detail.social_item.status)} /> : null}
+        {socialLabel && socialLabel !== execLabel ? <StatusPill label={socialLabel} /> : null}
       </div>
-      {skillId === "nova.drafting" || skillId === "nova.social.draft" ? (
-        <label className="field">
-          Artifact
-          <textarea rows={10} value={artifact} onChange={(e) => onEdit(e.target.value)} />
-        </label>
-      ) : (
-        <pre className="whitespace-pre-wrap border border-line bg-paper p-3 text-sm">{artifact || "No artifact."}</pre>
-      )}
+      <ArtifactView
+        text={artifact}
+        editable={skillId === "nova.drafting" || skillId === "nova.social.draft"}
+        onEdit={onEdit}
+      />
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="btn" onClick={() => void navigator.clipboard.writeText(artifact)}>
-          Copy
+          Copy recorded artifact
         </button>
       </div>
       {detail?.social_item ? (
         <dl className="mt-4 grid gap-2 text-sm md:grid-cols-2">
           <div>
-            <dt className="text-muted">Pillar</dt>
-            <dd>{detail.social_item.brand_id}</dd>
+            <dt className="text-muted">Brand</dt>
+            <dd>
+              {brands.find((brand) => brand.brand_id === detail.social_item?.brand_id)?.display_name ??
+                detail.social_item.brand_id}
+            </dd>
           </div>
           <div>
             <dt className="text-muted">Artifact hash</dt>
@@ -496,35 +507,34 @@ function ResultPane({
           </div>
           {detail.social_item.external_action_id ? (
             <div>
-              <dt className="text-muted">external_action_id</dt>
-              <dd className="font-mono text-xs">{detail.social_item.external_action_id}</dd>
+              <dt className="text-muted">External action</dt>
+              <dd>
+                <HashValue value={detail.social_item.external_action_id} label="external action id" />
+              </dd>
             </div>
           ) : null}
         </dl>
       ) : null}
       {detail?.approval?.status === "pending" ? (
-        <div className="mt-4 border border-line p-3">
-          <h3 className="text-sm font-semibold">Pending approval</h3>
-          <p className="mt-1 text-sm">{detail.execution.skill_id}</p>
-          <p className="text-sm text-muted">Requester {detail.approval.requested_by}</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm">{detail.social_item?.draft_text ?? artifact}</p>
-          <p className="mt-2">
-            <HashValue value={detail.approval.artifact_hash} label="approval artifact hash" />
-          </p>
-          <p className="mt-2 text-sm text-muted">A different authorized user must decide. Self-approval is denied.</p>
-          {canApprove ? (
-            <div className="mt-3 flex gap-2">
-              <button type="button" className="btn btn-primary" onClick={() => void onDecide(true)}>
-                Approve
-              </button>
-              <button type="button" className="btn btn-danger" onClick={() => void onDecide(false)}>
-                Reject
-              </button>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-muted">You do not have approvals.decide.</p>
-          )}
-        </div>
+        <ApprovalCard
+          skillId={detail.execution.skill_id}
+          approval={detail.approval}
+          artifactText={detail.social_item?.draft_text ?? artifact}
+          canApprove={canApprove}
+          actorId={actorId}
+          onDecide={onDecide}
+        />
+      ) : null}
+      {detail?.approval?.status === "approved" ? (
+        <p className="mt-4 text-sm text-muted">
+          Approved by{" "}
+          {actorDisplay({
+            name: detail.approval.decided_by_name,
+            email: detail.approval.decided_by_email,
+            id: detail.approval.decided_by,
+          })}
+          . Core still enforces exact artifact hash on publish.
+        </p>
       ) : null}
       {detail?.approval?.status === "approved" &&
       detail.social_item &&
@@ -551,5 +561,137 @@ function ResultPane({
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+function CitationList({
+  citations,
+  recordId,
+  hadRetrieval,
+}: {
+  citations: Citation[];
+  recordId?: string | null;
+  hadRetrieval: boolean;
+}) {
+  const visible = dedupeCitations(citations);
+  if (visible.length > 0) {
+    return (
+      <ul className="list-disc pl-4" data-testid="nova-citations">
+        {visible.map((citation) => (
+          <li key={citation.key}>
+            {citation.title}
+            {citation.chunkCount > 1 ? ` · ${citation.chunkCount} chunks` : null}
+            {citation.page ? ` p.${citation.page}` : null}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (hadRetrieval || recordId) {
+    return (
+      <p className="text-sm">
+        Knowledge provenance preserved in Verity Record
+        {recordId ? (
+          <>
+            {" "}
+            (
+            <Link className="underline" href={`/audit/${recordId}`}>
+              open record
+            </Link>
+            )
+          </>
+        ) : null}
+        . No additional titles are attached to this Shell view.
+      </p>
+    );
+  }
+  return <span>None</span>;
+}
+
+function ArtifactView({
+  text,
+  editable,
+  onEdit,
+}: {
+  text: string;
+  editable: boolean;
+  onEdit: (value: string) => void;
+}) {
+  const presented = presentMockArtifact(text);
+  return (
+    <div>
+      {presented.mock ? (
+        <p className="mb-2 border border-line bg-paper px-3 py-2 text-sm" data-testid="mock-model-output">
+          Mock model output. The recorded artifact below is what was hashed. This is not a production model
+          response.
+        </p>
+      ) : null}
+      {editable ? (
+        <label className="field">
+          Recorded artifact
+          <textarea rows={10} value={text} onChange={(e) => onEdit(e.target.value)} />
+        </label>
+      ) : (
+        <pre className="whitespace-pre-wrap border border-line bg-paper p-3 text-sm">{text || "No artifact."}</pre>
+      )}
+    </div>
+  );
+}
+
+function ApprovalCard({
+  skillId,
+  approval,
+  artifactText,
+  canApprove,
+  actorId,
+  onDecide,
+}: {
+  skillId: string | null;
+  approval: NonNullable<NovaRunDetail["approval"]>;
+  artifactText: string;
+  canApprove: boolean;
+  actorId?: string;
+  onDecide: (allow: boolean) => Promise<void>;
+}) {
+  const isRequester = Boolean(actorId && actorId === approval.requested_by);
+  const showButtons = canApprove && !isRequester;
+  return (
+    <div className="mt-4 border border-line p-3">
+      <h3 className="text-sm font-semibold">Awaiting approval</h3>
+      <p className="mt-1 text-sm">{skillLabel(skillId)}</p>
+      <p className="text-sm text-muted">
+        Requested by{" "}
+        {actorDisplay({
+          name: approval.requested_by_name,
+          email: approval.requested_by_email,
+          id: approval.requested_by,
+        })}
+      </p>
+      <p className="mt-2 whitespace-pre-wrap text-sm">{artifactText}</p>
+      <p className="mt-2">
+        <HashValue value={approval.artifact_hash} label="approval artifact hash" />
+      </p>
+      {isRequester ? (
+        <p className="mt-2 text-sm text-muted">
+          You cannot approve this request. A different authorized user must approve. Self-approval is denied by Core.
+        </p>
+      ) : !canApprove ? (
+        <p className="mt-2 text-sm text-muted">
+          You cannot approve this request. A different authorized user must approve.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Exact artifact hash is enforced. UI controls are not authorization.</p>
+      )}
+      {showButtons ? (
+        <div className="mt-3 flex gap-2">
+          <button type="button" className="btn btn-primary" onClick={() => void onDecide(true)}>
+            Approve
+          </button>
+          <button type="button" className="btn btn-danger" onClick={() => void onDecide(false)}>
+            Reject
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

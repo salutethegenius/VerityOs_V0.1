@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
-import { mkdirSync } from "node:fs";
 import pg from "pg";
 import { createOrganization, createServiceCredential, createUser } from "@verityos/identity";
 import { seedDefaultCommand } from "@verityos/command";
+import { writeRepoSeedFile } from "./seed-paths.js";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://verityos:verityos@127.0.0.1:5432/verityos_audit";
@@ -137,20 +136,17 @@ async function main() {
       nova_service_token: novaCred.token,
       nova_internal_token: internalToken,
     };
-    mkdirSync("tmp", { recursive: true });
-    writeFileSync("tmp/verity-dev-seed.json", JSON.stringify(payload, null, 2));
+    const seedFile = writeRepoSeedFile("verity-dev-seed.json", payload);
     process.stdout.write(
       [
         "Seeded development organization.",
-        `  email: ${EMAIL}`,
-        `  password: ${PASSWORD}`,
-        `  member_email: ${MEMBER_EMAIL}`,
-        `  member_password: ${MEMBER_PASSWORD}`,
-        `  organization_id: ${organizationId}`,
-        `  admin_user_id: ${adminUserId}`,
-        `  NOVA_SERVICE_TOKEN: ${novaCred.token}`,
-        `  NOVA_INTERNAL_TOKEN: ${internalToken}`,
-        "Wrote tmp/verity-dev-seed.json",
+        "  logins (local development only):",
+        `    admin  ${EMAIL} / ${PASSWORD}`,
+        `    member ${MEMBER_EMAIL} / ${MEMBER_PASSWORD}`,
+        "  member drafts; admin approves (self-approval is denied).",
+        `  seed file: ${seedFile.relative}`,
+        `  seed file (absolute): ${seedFile.absolute}`,
+        "  Nova service/internal tokens are in the seed file — not printed.",
         "",
       ].join("\n")
     );

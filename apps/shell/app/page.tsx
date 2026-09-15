@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { getHomeSummary } from "@/lib/api/auth";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, StatusPill } from "@/components/ui";
-import { formatTime } from "@/lib/format";
+import { formatTime, shortHash } from "@/lib/format";
+import { skillLabel } from "@/lib/operator-display";
 import { useAsync } from "@/lib/useAsync";
 
 export default function HomePage() {
@@ -50,7 +51,7 @@ export default function HomePage() {
           <Panel className="md:col-span-2 xl:col-span-3">
             <p className="text-xs uppercase tracking-wide text-muted">Audit</p>
             <p className="mt-2 text-sm">
-              Latest chain sequence {data.audit.latest_chain_sequence ?? "none"}
+              Latest Audit sequence {data.audit.latest_chain_sequence ?? "none"}
             </p>
             {data.audit.recent_records.length === 0 ? (
               <EmptyState title="No Verity Records" body="Records appear after governed Nova or Knowledge work." />
@@ -71,14 +72,14 @@ export default function HomePage() {
                       <td className="font-mono text-xs">
                         {row.verity_record_id ? (
                           <Link className="underline" href={`/audit/${row.verity_record_id}`}>
-                            {row.verity_record_id.slice(0, 8)}
+                            {shortHash(row.verity_record_id)}
                           </Link>
                         ) : (
                           "—"
                         )}
                       </td>
-                      <td>{row.skill_id ?? "—"}</td>
-                      <td>{row.status}</td>
+                      <td>{skillLabel(row.skill_id)}</td>
+                      <td className="capitalize">{row.status}</td>
                     </tr>
                   ))}
                 </tbody>
