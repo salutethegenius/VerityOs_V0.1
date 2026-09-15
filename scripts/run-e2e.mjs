@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -27,17 +27,23 @@ async function waitFor(url, timeoutMs = 90_000) {
 }
 
 const children = [];
-function track(child) {
+let shuttingDown = false;
+
+function track(child, name) {
   children.push(child);
   child.on("exit", (code, signal) => {
+    if (shuttingDown) return;
     if (code && code !== 0) {
-      process.stderr.write(`${child.spawnargs.join(" ")} exited ${code} ${signal ?? ""}\n`);
+      process.stderr.write(`${name} exited ${code} ${signal ?? ""}\n`);
+      shutdown();
+      process.exit(code);
     }
   });
   return child;
 }
 
 function shutdown() {
+  shuttingDown = true;
   for (const child of children) {
     child.kill("SIGTERM");
   }
@@ -46,6 +52,11 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 mkdirSync("tmp", { recursive: true });
+try {
+  execSync("pkill -f 'next-server \\(v' || true; pkill -f 'playwright test' || true", { stdio: "ignore" });
+} catch {
+  // no leftover processes
+}
 const seeded = run("node", ["apps/core-api/dist/seed-dev.js"], { DATABASE_URL });
 const seedCode = await new Promise((resolve) => seeded.on("exit", resolve));
 if (seedCode !== 0) {
@@ -56,7 +67,7 @@ if (!existsSync("tmp/verity-dev-seed.json")) {
 }
 const seed = JSON.parse(readFileSync("tmp/verity-dev-seed.json", "utf8"));
 
-track(run("node", ["scripts/meta-mock.mjs"]));
+track(run("node", ["scripts/meta-mock.mjs"]), "meta-mock");
 
 track(
   run("node", ["apps/core-api/dist/start.js"], {
@@ -70,7 +81,8 @@ track(
     META_GRAPH_BASE: "http://127.0.0.1:8099",
     META_PAGE_ACCESS_TOKEN: "fake-page-token",
     VERITY_DEPLOYMENT_PROFILE: "development",
-  })
+  }),
+  "core-api"
 );
 await waitFor("http://127.0.0.1:8080/v1/health");
 
@@ -87,7 +99,8 @@ track(
       NOVA_INTERNAL_TOKEN: seed.nova_internal_token,
       PYTHONPATH: `${process.cwd()}/apps/nova/src`,
     }
-  )
+  ),
+  "nova"
 );
 await waitFor("http://127.0.0.1:8090/health");
 
@@ -95,13 +108,16 @@ track(
   run("pnpm", ["--filter", "@verityos/shell", "start"], {
     CORE_API_URL: "http://127.0.0.1:8080",
     PORT: "3000",
-  })
+  }),
+  "shell"
 );
 await waitFor("http://127.0.0.1:3000/login");
 
 const playwright = run("pnpm", ["--filter", "@verityos/shell", "test:e2e"], {
   SEED_ADMIN_EMAIL: seed.email,
   SEED_ADMIN_PASSWORD: seed.password,
+  SEED_MEMBER_EMAIL: seed.member_email,
+  SEED_MEMBER_PASSWORD: seed.member_password,
   SHELL_URL: "http://127.0.0.1:3000",
 });
 const code = await new Promise((resolve) => playwright.on("exit", resolve));

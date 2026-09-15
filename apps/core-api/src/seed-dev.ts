@@ -2,13 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
 import pg from "pg";
-import { createOrganization, createServiceCredential } from "@verityos/identity";
+import { createOrganization, createServiceCredential, createUser } from "@verityos/identity";
 import { seedDefaultCommand } from "@verityos/command";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://verityos:verityos@127.0.0.1:5432/verityos_audit";
 const EMAIL = (process.env.SEED_ADMIN_EMAIL ?? "admin@verity.local").toLowerCase();
 const PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "verity-dev-admin";
+const MEMBER_EMAIL = (process.env.SEED_MEMBER_EMAIL ?? "member@verity.local").toLowerCase();
+const MEMBER_PASSWORD = process.env.SEED_MEMBER_PASSWORD ?? "verity-dev-member";
 const ORG_NAME = process.env.SEED_ORG_NAME ?? "Verity Demo";
 
 function sha256(text: string): string {
@@ -33,9 +35,15 @@ async function main() {
 
     let organizationId: string;
     let adminUserId: string;
+    let memberRoleId: string;
     if (existing.rows[0]) {
       organizationId = existing.rows[0].organization_id;
       adminUserId = existing.rows[0].user_id;
+      const memberRole = await pool.query<{ id: string }>(
+        `SELECT id FROM auth.roles WHERE organization_id = $1 AND name = 'member'`,
+        [organizationId]
+      );
+      memberRoleId = memberRole.rows[0].id;
     } else {
       const created = await createOrganization(pool, {
         name: ORG_NAME,
@@ -50,6 +58,18 @@ async function main() {
       });
       organizationId = created.organizationId;
       adminUserId = created.adminUserId;
+      memberRoleId = created.memberRoleId;
+    }
+
+    const memberExists = await pool.query(`SELECT 1 FROM auth.users WHERE email = $1`, [MEMBER_EMAIL]);
+    if (memberExists.rowCount === 0) {
+      await createUser(pool, {
+        organizationId,
+        roleId: memberRoleId,
+        email: MEMBER_EMAIL,
+        password: MEMBER_PASSWORD,
+        displayName: "Verity Member",
+      });
     }
 
     const voice = "Warm, precise institutional voice. Do not invent legal claims.";
@@ -103,6 +123,8 @@ async function main() {
       admin_user_id: adminUserId,
       email: EMAIL,
       password: PASSWORD,
+      member_email: MEMBER_EMAIL,
+      member_password: MEMBER_PASSWORD,
       nova_service_token: novaCred.token,
       nova_internal_token: internalToken,
     };
@@ -113,6 +135,8 @@ async function main() {
         "Seeded development organization.",
         `  email: ${EMAIL}`,
         `  password: ${PASSWORD}`,
+        `  member_email: ${MEMBER_EMAIL}`,
+        `  member_password: ${MEMBER_PASSWORD}`,
         `  organization_id: ${organizationId}`,
         `  admin_user_id: ${adminUserId}`,
         `  NOVA_SERVICE_TOKEN: ${novaCred.token}`,

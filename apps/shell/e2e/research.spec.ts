@@ -8,7 +8,7 @@ test("login failure then research verify workflow", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("wrong-password-value");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("alert")).toContainText(/invalid|credential|password/i);
+  await expect(page.getByText(/invalid email or password/i)).toBeVisible();
 
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -28,7 +28,7 @@ test("login failure then research verify workflow", async ({ page }) => {
   await page.getByRole("button", { name: "Upload" }).click();
   await page.getByRole("link", { name: "France fact" }).click();
   await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("Approved")).toBeVisible();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Index" }).click();
 
   await page.getByRole("link", { name: "Nova" }).click();
@@ -40,10 +40,8 @@ test("login failure then research verify workflow", async ({ page }) => {
     await collectionBox.check();
   }
   await page.getByRole("button", { name: "Run research" }).click();
-  await expect(page.getByText(/completed|blocked|Insufficient/i)).toBeVisible({ timeout: 60_000 });
-
-  const recordLink = page.getByRole("link").filter({ hasText: /[0-9a-f-]{8}/ }).first();
-  await recordLink.click();
+  await expect(page.getByTestId("verity-record-link")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("verity-record-link").click();
   await expect(page.getByRole("heading", { name: "Verity Record" })).toBeVisible();
   await page.getByRole("button", { name: "Verify Record" }).click();
   await expect(page.getByText("Integrity Verified")).toBeVisible();

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   decideNovaApproval,
   executeNovaSkill,
@@ -194,7 +194,11 @@ export default function NovaPage() {
               <dt className="text-muted">Verity Record</dt>
               <dd>
                 {governance.recordId ? (
-                  <Link className="font-mono text-xs underline" href={`/audit/${governance.recordId}`}>
+                  <Link
+                    className="font-mono text-xs underline"
+                    href={`/audit/${governance.recordId}`}
+                    data-testid="verity-record-link"
+                  >
                     {governance.recordId.slice(0, 8)}
                   </Link>
                 ) : (
@@ -353,8 +357,13 @@ function SocialForm({
   onSubmit: (input: Record<string, unknown>) => void;
 }) {
   const active = brands.filter((b) => b.active);
-  const [brandId, setBrandId] = useState(active[0]?.brand_id ?? "");
+  const [brandId, setBrandId] = useState("");
   const [platform, setPlatform] = useState("facebook");
+  useEffect(() => {
+    if (!brandId && active[0]) {
+      setBrandId(active[0].brand_id);
+    }
+  }, [active, brandId]);
   const [topic, setTopic] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   return (
@@ -494,6 +503,7 @@ function ResultPane({
           <p className="mt-2">
             <HashValue value={detail.approval.artifact_hash} label="approval artifact hash" />
           </p>
+          <p className="mt-2 text-sm text-muted">A different authorized user must decide. Self-approval is denied.</p>
           {canApprove ? (
             <div className="mt-3 flex gap-2">
               <button type="button" className="btn btn-primary" onClick={() => void onDecide(true)}>
