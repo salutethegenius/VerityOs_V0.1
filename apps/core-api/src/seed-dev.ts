@@ -111,6 +111,15 @@ async function main() {
       [organizationId]
     );
 
+    if (process.env.SEED_EXPIRE_PENDING === "1") {
+      await pool.query(
+        `UPDATE command.approvals
+         SET status = 'expired'
+         WHERE organization_id = $1 AND status = 'pending'`,
+        [organizationId]
+      );
+    }
+
     const novaCred = await createServiceCredential(pool, {
       name: `nova-dev-${randomUUID().slice(0, 8)}`,
       organizationId,

@@ -57,7 +57,10 @@ try {
 } catch {
   // no leftover processes
 }
-const seeded = run("node", ["apps/core-api/dist/seed-dev.js"], { DATABASE_URL });
+const seeded = run("node", ["apps/core-api/dist/seed-dev.js"], {
+  DATABASE_URL,
+  SEED_EXPIRE_PENDING: "1",
+});
 const seedCode = await new Promise((resolve) => seeded.on("exit", resolve));
 if (seedCode !== 0) {
   process.exit(seedCode ?? 1);

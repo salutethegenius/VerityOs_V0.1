@@ -26,8 +26,13 @@ test("social draft approve publish and verify", async ({ page }) => {
   await signIn(page, adminEmail, adminPassword);
   await page.getByRole("link", { name: "Command" }).click();
   await page.getByRole("link", { name: "Approvals" }).click();
-  await expect(page.getByTestId("approval-decide-allow")).toBeVisible();
-  await page.getByTestId("approval-decide-allow").first().click();
+  const approve = page.getByTestId("approval-decide-allow").first();
+  await expect(approve).toBeVisible();
+  const decided = page.waitForResponse(
+    (response) => response.url().includes("/decide") && response.request().method() === "POST"
+  );
+  await approve.click();
+  expect((await decided).ok()).toBeTruthy();
   await expect(page.getByTestId("approval-decide-allow")).toHaveCount(0);
 
   await page.getByRole("link", { name: "Nova" }).click();
