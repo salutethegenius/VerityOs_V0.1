@@ -36,9 +36,14 @@ test("social draft approve publish and verify", async ({ page }) => {
   await expect(page.getByTestId("approval-decide-allow")).toHaveCount(0);
 
   await page.getByRole("link", { name: "Nova" }).click();
+  await page.getByRole("tab", { name: "Social Draft" }).click();
   await page.getByRole("button", { name: /nova.social.draft/ }).first().click();
   await expect(page.getByRole("button", { name: "Publish Now" })).toBeVisible();
+  const published = page.waitForResponse(
+    (response) => response.url().includes("/connectors/actions") && response.request().method() === "POST"
+  );
   await page.getByRole("button", { name: "Publish Now" }).click();
+  expect((await published).ok()).toBeTruthy();
   await expect(page.getByText("Published", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("link", { name: "Audit" }).click();

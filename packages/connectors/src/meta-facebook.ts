@@ -7,7 +7,9 @@ import {
   type ConnectorHealth,
 } from "./types.js";
 
-const GRAPH_BASE = process.env.META_GRAPH_BASE ?? "https://graph.facebook.com";
+function graphBase(): string {
+  return process.env.META_GRAPH_BASE ?? "https://graph.facebook.com";
+}
 const DEFAULT_VERSION = "v23.0";
 const MIN_SCHEDULE_OFFSET_SEC = 10 * 60;
 const MAX_SCHEDULE_OFFSET_SEC = 30 * 24 * 60 * 60;
@@ -82,7 +84,7 @@ export class MetaFacebookConnector implements Connector {
 
   private endpoint(pageId: string, edge = ""): string {
     const suffix = edge ? `/${edge.replace(/^\//, "")}` : "";
-    return `${GRAPH_BASE}/${this.apiVersion}/${pageId}${suffix}`;
+    return `${graphBase()}/${this.apiVersion}/${pageId}${suffix}`;
   }
 
   private async call(

@@ -90,6 +90,14 @@ export default function NovaPage() {
                     className="w-full text-left hover:underline"
                     onClick={() => {
                       setResult(null);
+                      if (
+                        run.skill_id === "nova.research" ||
+                        run.skill_id === "nova.drafting" ||
+                        run.skill_id === "nova.social.draft"
+                      ) {
+                        setSkillId(run.skill_id);
+                      }
+                      setDraftEdit(null);
                       void loadRun(run.execution_id);
                     }}
                   >
@@ -518,7 +526,10 @@ function ResultPane({
           )}
         </div>
       ) : null}
-      {detail?.approval?.status === "approved" && detail.social_item && !unsealed ? (
+      {detail?.approval?.status === "approved" &&
+      detail.social_item &&
+      !unsealed &&
+      ["approved", "authorized"].includes(detail.social_item.status) ? (
         <div className="mt-4 space-y-2">
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary" onClick={() => void onPublish("publish_post")}>
