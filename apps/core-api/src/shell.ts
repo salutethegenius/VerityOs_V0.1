@@ -6,6 +6,7 @@ import {
   listExecutions,
 } from "@verityos/audit-kernel";
 import { decideExecutionApproval } from "./execution/lifecycle.js";
+import { finalizeGovernedExecution } from "./execution/service.js";
 import { getVerityRecord, listVerityRecords } from "./execution/records.js";
 import { requestConnectorAction, healthCheckConnector } from "./connectors/gateway.js";
 import { ApiError } from "./errors.js";
@@ -20,7 +21,10 @@ import type { AuthContext } from "@verityos/identity";
 import { PRODUCTION_EMBEDDING_DIMENSIONS } from "@verityos/knowledge";
 import { loadPermissions } from "@verityos/identity";
 
-export type NovaInvoker = (path: string, init?: { method?: string; body?: unknown }) => Promise<unknown>;
+export type NovaInvoker = (
+  path: string,
+  init?: { method?: string; body?: unknown; requestId?: string }
+) => Promise<unknown>;
 
 export function createNovaInvoker(baseUrl?: string, token?: string): NovaInvoker | undefined {
   const url = (baseUrl ?? process.env.NOVA_INTERNAL_URL ?? "").replace(/\/$/, "");
@@ -29,12 +33,16 @@ export function createNovaInvoker(baseUrl?: string, token?: string): NovaInvoker
     return undefined;
   }
   return async (path, init) => {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/json",
+    };
+    if (init?.requestId) {
+      headers["x-request-id"] = init.requestId;
+    }
     const response = await fetch(`${url}${path}`, {
       method: init?.method ?? "GET",
-      headers: {
-        authorization: `Bearer ${secret}`,
-        "content-type": "application/json",
-      },
+      headers,
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     });
     const text = await response.text();
@@ -175,7 +183,7 @@ export async function systemStatus(
   );
   const dataDir = process.env.VERITY_DATA_DIR ?? "./data";
   return {
-    core: { status: "ok", phase: "10", database: Boolean(db.rows[0]) },
+    core: { status: "ok", phase: "11", database: Boolean(db.rows[0]) },
     nova,
     kernel: {
       version: process.env.AUDIT_KERNEL_VERSION ?? "0.2.0",
@@ -192,7 +200,7 @@ export async function systemStatus(
       key: row.connector_key,
       enabled: row.enabled,
     })),
-    deployment_profile: process.env.VERITY_DEPLOYMENT_PROFILE ?? "development",
+    deployment_profile: process.env.VERITY_PROFILE ?? process.env.VERITY_DEPLOYMENT_PROFILE ?? "development",
   };
 }
 
@@ -550,7 +558,7 @@ export async function sessionConnectorAction(
     payload?: Record<string, unknown>;
   }
 ) {
-  return requestConnectorAction(pool, deps, {
+  const result = await requestConnectorAction(pool, deps, {
     organizationId: auth.organizationId,
     executionId,
     actorId: auth.userId,
@@ -560,6 +568,26 @@ export async function sessionConnectorAction(
     artifactHash: body.artifact_hash,
     payload: body.payload ?? {},
   });
+  const status = (result as { status?: string }).status;
+  if (status === "succeeded") {
+    const execution = await getExecution(pool, auth.organizationId, executionId);
+    if (execution && !["completed", "failed", "blocked", "cancelled"].includes(execution.status)) {
+      try {
+        await finalizeGovernedExecution(pool, {
+          executionId,
+          organizationId: auth.organizationId,
+          outcome: "completed",
+          response: { connector_action: status },
+        });
+      } catch (err) {
+        const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+        if (code !== "INVALID_EXECUTION_TRANSITION") {
+          throw err;
+        }
+      }
+    }
+  }
+  return result;
 }
 
 export async function sessionConnectorHealth(

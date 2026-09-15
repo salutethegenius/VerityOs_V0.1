@@ -1,6 +1,7 @@
 import http from "node:http";
 
 const port = Number(process.env.META_MOCK_PORT ?? 8099);
+const host = process.env.META_MOCK_HOST ?? "127.0.0.1";
 
 const server = http.createServer((req, res) => {
   const url = req.url ?? "";
@@ -17,6 +18,6 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ id: "mock" }));
 });
 
-server.listen(port, "127.0.0.1", () => {
-  process.stdout.write(`meta mock listening on 127.0.0.1:${port}\n`);
+server.listen(port, host, () => {
+  process.stdout.write(`meta mock listening on ${host}:${port}\n`);
 });

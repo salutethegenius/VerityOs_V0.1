@@ -36,6 +36,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
+  if (!headers.has("x-request-id")) {
+    headers.set("x-request-id", crypto.randomUUID());
+  }
   const response = await fetch(path, {
     ...init,
     headers,

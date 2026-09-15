@@ -99,4 +99,15 @@ describe("native extractors and MIME validation", () => {
     const huge = Buffer.alloc(10 * 1024 * 1024 + 1, 65);
     expect(() => assertUpload(huge, "text/plain")).toThrow(/size limit/);
   });
+
+  it("rejects path-traversal filenames", () => {
+    expect(() => sniffMime("../etc/passwd.txt", Buffer.from("plain"))).toThrow(/invalid filename/);
+    expect(() => sniffMime("foo/bar.md", Buffer.from("# x"))).toThrow(/invalid filename/);
+  });
+
+  it("strips script and style from HTML before indexing text", async () => {
+    const html = "<html><script>secret()</script><style>p{}</style><p>Public advisory</p></html>";
+    expect(stripHtml(html)).toBe("Public advisory");
+    expect(await extractText("text/html", Buffer.from(html))).toBe("Public advisory");
+  });
 });

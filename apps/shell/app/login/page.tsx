@@ -43,7 +43,7 @@ export default function LoginPage() {
         <form className="mt-6 space-y-4" onSubmit={(event) => void onSubmit(event)}>
           <label className="field">
             Email
-            <input autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </label>
           <label className="field">
             Password

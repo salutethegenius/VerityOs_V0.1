@@ -188,7 +188,7 @@ describe("Phase 10 Core shell facade", () => {
     });
     expect(status.statusCode).toBe(200);
     const body = status.json();
-    expect(body.core.phase).toBe("10");
+    expect(body.core.phase).toBe("11");
     expect(body.nova.status).toBe("ok");
     expect(JSON.stringify(body)).not.toMatch(
       /DATABASE_URL|NOVA_INTERNAL_TOKEN|META_PAGE_ACCESS_TOKEN|password_hash|xoxb-/

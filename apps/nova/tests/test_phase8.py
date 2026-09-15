@@ -82,7 +82,7 @@ def store() -> MemoryStore:
 
 
 def test_version() -> None:
-    assert __version__ == "0.10.0"
+    assert __version__ == "0.11.0"
 
 
 def test_skill_registry_and_manifests(store: MemoryStore) -> None:
@@ -410,7 +410,7 @@ def test_health_and_skills_api(store: MemoryStore) -> None:
     )
     client = TestClient(app)
     health = client.get("/health")
-    assert health.json()["phase"] == "10"
+    assert health.json()["phase"] == "11"
     denied = client.get("/internal/v1/skills")
     assert denied.status_code == 401
     skills = client.get("/internal/v1/skills", headers={"authorization": "Bearer internal-secret"})

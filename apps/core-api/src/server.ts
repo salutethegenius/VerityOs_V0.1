@@ -52,6 +52,10 @@ import {
 import { recordKernelCheckpoint, withStandaloneExecution } from "./audit.js";
 import { loadConfig } from "./config.js";
 import { ApiError, publicMessage } from "./errors.js";
+import { applySecurityHeaders } from "./security-headers.js";
+import { enforceLimit, limiters } from "./rate-limit.js";
+import { logEvent } from "./log.js";
+import { metricsSnapshot, recordRequest } from "./metrics.js";
 import {
   ExecutionError,
   executeModelForExecution,
@@ -182,6 +186,8 @@ export async function buildServer(
         ? request.headers["x-request-id"]
         : randomUUID();
     reply.header("x-request-id", request.requestId);
+    applySecurityHeaders(reply, { https: config.cookieSecure });
+    (request as FastifyRequest & { startedAt: number }).startedAt = Date.now();
     if (!unsafeMethods.has(request.method)) {
       return;
     }
@@ -192,6 +198,21 @@ export async function buildServer(
     if (typeof origin !== "string" || !allowedOrigins.includes(origin)) {
       throw new ApiError(403, "ORIGIN_DENIED", "origin is not allowed");
     }
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    const started = (request as FastifyRequest & { startedAt?: number }).startedAt ?? Date.now();
+    const latency = Date.now() - started;
+    recordRequest(reply.statusCode, latency, request.routeOptions.url);
+    logEvent({
+      request_id: request.requestId,
+      route: request.routeOptions.url ?? request.url,
+      method: request.method,
+      status: reply.statusCode,
+      organization_id: request.auth?.organizationId,
+      actor_id: request.auth?.userId,
+      latency_ms: latency,
+    });
   });
 
   app.setErrorHandler((err, request, reply) => {
@@ -216,28 +237,57 @@ export async function buildServer(
   app.get("/v1/health", async () => ({
     status: "ok",
     component: "core-api",
-    phase: "10",
+    phase: "11",
   }));
+  app.get("/health/live", async () => ({ status: "ok", component: "core-api", phase: "11" }));
+  app.get("/health/ready", async () => {
+    await pool.query("SELECT 1");
+    const migrations = await pool.query<{ name: string }>(
+      `SELECT name FROM public.pgmigrations ORDER BY run_on DESC LIMIT 1`
+    ).catch(() => ({ rows: [] as Array<{ name: string }> }));
+    return {
+      status: "ok",
+      component: "core-api",
+      phase: "11",
+      database: true,
+      latest_migration: migrations.rows[0]?.name ?? null,
+    };
+  });
+  app.get("/v1/metrics", async () => metricsSnapshot());
 
   app.post("/v1/auth/login", async (request, reply) => {
     const body = request.body as { email?: string; password?: string; organization_id?: string };
     if (!body?.email || !body.password) {
       throw new ApiError(400, "INVALID_INPUT", "email and password are required");
     }
-    const { token, context } = await createSession(pool, {
-      email: body.email,
-      password: body.password,
-      organizationId: body.organization_id,
-      ip: request.ip,
-      userAgent: request.headers["user-agent"],
-    });
-    setSessionCookie(reply, token, config.cookieSecure);
-    return {
-      user_id: context.userId,
-      organization_id: context.organizationId,
-      role: context.roleName,
-      permissions: context.permissions,
-    };
+    const ip = request.ip || "unknown";
+    enforceLimit(limiters.login, `login:${ip}`, "too many login attempts");
+    try {
+      const { token, context } = await createSession(pool, {
+        email: body.email,
+        password: body.password,
+        organizationId: body.organization_id,
+        ip: request.ip,
+        userAgent: request.headers["user-agent"],
+      });
+      setSessionCookie(reply, token, config.cookieSecure);
+      return {
+        user_id: context.userId,
+        organization_id: context.organizationId,
+        role: context.roleName,
+        permissions: context.permissions,
+      };
+    } catch (err) {
+      if (err instanceof AuthError && err.code === "INVALID_CREDENTIALS") {
+        enforceLimit(
+          limiters.loginFail,
+          `loginfail:${ip}:${body.email.toLowerCase()}`,
+          "too many login attempts"
+        );
+        throw new ApiError(401, "INVALID_CREDENTIALS", "invalid email or password");
+      }
+      throw err;
+    }
   });
 
   app.post("/v1/auth/logout", async (request, reply) => {
@@ -580,6 +630,7 @@ export async function buildServer(
   app.post("/v1/knowledge/collections/:collectionId/sources", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "knowledge.manage");
+    enforceLimit(limiters.upload, `upload:${auth.userId}`, "too many uploads");
     const { collectionId } = request.params as { collectionId: string };
     await requireCollectionPermission(pool, {
       organizationId: auth.organizationId,
@@ -824,6 +875,7 @@ export async function buildServer(
   app.get("/v1/audit/export", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "audit.export");
+    enforceLimit(limiters.audit, `export:${auth.userId}`, "too many exports");
     const policy = await evaluatePolicy(pool, {
       organizationId: auth.organizationId,
       actorId: auth.userId,
@@ -1226,6 +1278,7 @@ export async function buildServer(
   app.post("/v1/audit/records/:verityRecordId/verify", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "audit.read");
+    enforceLimit(limiters.audit, `verify:${auth.userId}`, "too many verification requests");
     const { verityRecordId } = request.params as { verityRecordId: string };
     const record = await getVerityRecord(pool, auth.organizationId, verityRecordId);
     const bundle = await exportOrganizationEvidence(pool, auth.organizationId);
@@ -1316,22 +1369,52 @@ export async function buildServer(
   app.post("/v1/nova/skills/:skillId/execute", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "nova.use");
+    enforceLimit(limiters.nova, `nova:${auth.userId}`, "too many Nova executions");
     if (!novaInvoke) {
       throw new ApiError(503, "NOVA_UNAVAILABLE", "Nova runtime is not configured");
     }
     const { skillId } = request.params as { skillId: string };
+    if (skillId === "nova.social.draft") {
+      requirePermission(auth, "social.draft");
+    }
+    const skillPolicy = await evaluatePolicy(pool, {
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      roleId: auth.roleId,
+      action: {
+        type: "skill.use",
+        skillId,
+        classification: "internal",
+        riskTier: "medium",
+      },
+    });
+    if (skillPolicy.decision === "deny") {
+      throw new ApiError(403, skillPolicy.reason_code, "skill execution denied");
+    }
     const body = (request.body ?? {}) as Record<string, unknown>;
     if ("actor_id" in body || "organization_id" in body) {
       throw new ApiError(400, "UNTRUSTED_ACTOR", "actor and organization are derived from the session");
     }
-    return novaInvoke(`/internal/v1/skills/${encodeURIComponent(skillId)}/execute`, {
-      method: "POST",
-      body: {
-        ...body,
-        actor_id: auth.userId,
-        organization_id: auth.organizationId,
-      },
-    });
+    try {
+      return await novaInvoke(`/internal/v1/skills/${encodeURIComponent(skillId)}/execute`, {
+        method: "POST",
+        requestId: request.requestId,
+        body: {
+          ...body,
+          actor_id: auth.userId,
+          organization_id: auth.organizationId,
+        },
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      if (err && typeof err === "object" && "statusCode" in err && "code" in err) {
+        const mapped = err as { statusCode: number; code: string; message?: string };
+        throw new ApiError(mapped.statusCode, mapped.code, mapped.message ?? "nova request failed");
+      }
+      throw new ApiError(503, "NOVA_UNAVAILABLE", "nova request failed");
+    }
   });
 
   app.get("/v1/nova/runs", async (request) => {
@@ -1350,6 +1433,7 @@ export async function buildServer(
   app.post("/v1/nova/runs/:executionId/approvals/:approvalId/decide", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "approvals.decide");
+    enforceLimit(limiters.approval, `approval:${auth.userId}`, "too many approval decisions");
     const { executionId, approvalId } = request.params as { executionId: string; approvalId: string };
     const body = request.body as { allow?: boolean; artifact_hash?: string };
     if (typeof body.allow !== "boolean" || !body.artifact_hash) {
@@ -1381,6 +1465,8 @@ export async function buildServer(
   app.post("/v1/executions/:executionId/connectors/actions", async (request) => {
     const auth = await requireSession(pool, request);
     requirePermission(auth, "nova.use");
+    enforceLimit(limiters.connector, `connector:${auth.userId}`, "too many connector actions");
+    requirePermission(auth, "social.draft");
     const { executionId } = request.params as { executionId: string };
     const body = request.body as {
       connector_id?: string;

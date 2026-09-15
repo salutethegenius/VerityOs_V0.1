@@ -11,8 +11,7 @@ async function proxy(request: NextRequest, path: string[]): Promise<Response> {
   headers.set("origin", origin);
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
-  const requestId = request.headers.get("x-request-id");
-  if (requestId) headers.set("x-request-id", requestId);
+  headers.set("x-request-id", request.headers.get("x-request-id") ?? crypto.randomUUID());
 
   const init: RequestInit = {
     method: request.method,

@@ -122,7 +122,10 @@ def test_create_dev_app_uses_fake_slack(store: MemoryStore) -> None:
     client = TestClient(app)
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["phase"] == "10"
+    assert health.json()["phase"] == "11"
+    ready = client.get("/health/ready")
+    assert ready.status_code == 200
+    assert ready.json()["phase"] == "11"
     skills = client.get("/internal/v1/skills", headers={"authorization": "Bearer internal-secret"})
     assert skills.status_code == 200
     ids = {row["id"] for row in skills.json()["skills"]}

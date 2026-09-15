@@ -38,6 +38,14 @@ jobs:
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm test
+      - run: node scripts/secret-scan.mjs
+      - run: node scripts/secret-scan.mjs --self-test
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: bash scripts/backup-restore-smoke.sh
+      - run: bash scripts/migration-smoke.sh
+      - run: VERITY_PROFILE=development VERITY_DEMO_RESET=1 VERITY_EMBEDDING_PROVIDER=mock pnpm seed:demo
+      - run: VERITY_DEMO_CHECK_DB_ONLY=1 pnpm demo:check
 
   e2e:
     runs-on: ubuntu-latest
@@ -110,10 +118,11 @@ jobs:
       - run: pnpm install
       - run: pnpm db:migrate
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install ruff pytest pytest-asyncio
+      - run: python -m pip install ruff pytest pytest-asyncio pip-audit
       - run: python -m pip install -e apps/nova -e apps/knowledge -e packages/sdk-python
       - run: ruff check apps/nova apps/knowledge packages/sdk-python
       - run: pytest apps/nova apps/knowledge packages/sdk-python
+      - run: python -m pip_audit -e apps/nova -e apps/knowledge -e packages/sdk-python || true
 
   docker:
     runs-on: ubuntu-latest

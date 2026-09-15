@@ -2,6 +2,28 @@ import JSZip from "jszip";
 import { KnowledgeError } from "./errors.js";
 import { MAX_DOCX_FILES, MAX_DOCX_UNCOMPRESSED_BYTES } from "./storage.js";
 
+export const PARSER_TIMEOUT_MS = 15_000;
+export const MAX_PDF_PAGES = 75;
+
+async function withTimeout<T>(work: Promise<T>, ms = PARSER_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new KnowledgeError("PARSER_TIMEOUT", "parser timed out", 400)),
+          ms
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export async function extractText(mime: string, bytes: Buffer): Promise<string> {
   switch (mime) {
     case "text/plain":
@@ -10,9 +32,9 @@ export async function extractText(mime: string, bytes: Buffer): Promise<string> 
     case "text/html":
       return stripHtml(bytes.toString("utf8"));
     case "application/pdf":
-      return extractPdf(bytes);
+      return withTimeout(extractPdf(bytes));
     case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-      return extractDocx(bytes);
+      return withTimeout(extractDocx(bytes));
     default:
       throw new KnowledgeError("UNSUPPORTED_TYPE", "unsupported file type", 400);
   }
@@ -44,6 +66,9 @@ async function extractPdf(bytes: Buffer): Promise<string> {
   });
   const pdf = await loadingTask.promise;
   try {
+    if (pdf.numPages > MAX_PDF_PAGES) {
+      throw new KnowledgeError("INVALID_PDF", "PDF exceeds page limit", 400);
+    }
     const pages: string[] = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
