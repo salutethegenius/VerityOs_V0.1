@@ -539,8 +539,13 @@ export async function finalizeGovernedExecution(
   if (input.response !== undefined) {
     responseHash = sha256Hex(JSON.stringify(input.response));
   } else if (input.outcome === "completed") {
-    const completed = [...events].reverse().find((event) => event.event_type === "model.execution.completed");
-    responseHash = completed?.output_hash ?? null;
+    const skillArtifact = [...events]
+      .reverse()
+      .find((event) => event.event_type === "nova.skill.completed" && event.output_hash);
+    const modelCompleted = [...events]
+      .reverse()
+      .find((event) => event.event_type === "model.execution.completed");
+    responseHash = skillArtifact?.output_hash ?? modelCompleted?.output_hash ?? null;
   }
   const sealed = await sealExecution(
     pool,

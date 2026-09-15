@@ -17,13 +17,13 @@ from verityos_nova.skills.social.onboarding import (
     apply_proposed_brand,
     synthesize_session,
 )
-from verityos_nova.store import MemoryStore
+from verityos_nova.store import Store
 
 
 async def handle_interaction(
     *,
     payload: dict[str, Any],
-    store: MemoryStore,
+    store: Store,
     slack: SlackClient,
     engine: SkillEngine,
     registry: SkillRegistry,
@@ -87,11 +87,12 @@ async def handle_interaction(
                 )
                 item.slack_message_ts = posted_ts
                 item.slack_channel = channel
+                store.save_item(item)
         return {"ok": True, "status": outcome.status, "execution_id": outcome.execution_id}
 
     if action_id.startswith(("onboard_approve_", "onboard_reject_", "onboard_regen_")):
         session_id = action.get("value") or ""
-        session = next((s for s in store.sessions.values() if s.id == session_id), None)
+        session = store.get_session_by_id(session_id)
         if session is None:
             return {"ok": False, "error": "session_not_found"}
         if action_id.startswith("onboard_approve_"):

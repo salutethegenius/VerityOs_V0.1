@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 from verityos_nova.runtime.client import VerityCoreClient
 from verityos_nova.runtime.context import NovaContext, SkillResult
 from verityos_nova.runtime.errors import NovaError
 from verityos_nova.runtime.registry import NovaSkill
-from verityos_nova.store import ContentItem, MemoryStore
+from verityos_nova.store import ContentItem, SkillRun, Store
+
+logger = logging.getLogger("verityos_nova.engine")
 
 
 @dataclass
@@ -25,9 +29,47 @@ class SkillRunOutcome:
 
 
 class SkillEngine:
-    def __init__(self, client: VerityCoreClient, store: MemoryStore) -> None:
+    def __init__(self, client: VerityCoreClient, store: Store) -> None:
         self.client = client
         self.store = store
+
+    def _persist_run(
+        self,
+        context: NovaContext,
+        execution_id: str,
+        skill: NovaSkill,
+        status: str,
+        config_hash: str | None = None,
+        artifact_hash: str | None = None,
+    ) -> None:
+        existing = self.store.get_skill_run(context.organization_id, execution_id)
+        self.store.save_skill_run(
+            SkillRun(
+                id=existing.id if existing else str(uuid4()),
+                organization_id=context.organization_id,
+                execution_id=execution_id,
+                skill_id=skill.manifest.id,
+                skill_version=skill.manifest.version,
+                actor_id=context.actor_id,
+                status=status,
+                config_hash=config_hash,
+                artifact_hash=artifact_hash,
+            )
+        )
+
+    async def _fail_open_execution(
+        self, execution_id: str, skill: NovaSkill, reason_code: str, outcome: str = "failed"
+    ) -> None:
+        try:
+            await self.client.skill_fail(
+                execution_id,
+                skill_id=skill.manifest.id,
+                skill_version=skill.manifest.version,
+                reason_code=reason_code,
+            )
+            await self.client.finalize_execution(execution_id, outcome)
+        except NovaError:
+            logger.exception("failed to seal Nova execution after error")
 
     async def run(self, skill: NovaSkill, context: NovaContext) -> SkillRunOutcome:
         opened = await self.client.open_execution(
@@ -52,10 +94,16 @@ class SkillEngine:
                 start_meta["config_hash"] = plan.metadata["config_hash"]
             await self.client.skill_start(execution_id, **start_meta)
             events.append("nova.skill.started")
+            self._persist_run(
+                context,
+                execution_id,
+                skill,
+                "started",
+                config_hash=plan.metadata.get("config_hash"),
+            )
 
             retrieval_run_id = None
             chunk_ids: list[str] = []
-            model_text = ""
             if plan.retrieve:
                 knowledge = await self.client.retrieve_knowledge(
                     execution_id,
@@ -83,6 +131,7 @@ class SkillEngine:
                         reason_code="INSUFFICIENT_EVIDENCE",
                     )
                     events.append("nova.skill.failed")
+                    self._persist_run(context, execution_id, skill, "failed")
                     finalized = await self.client.finalize_execution(execution_id, "blocked")
                     events.append("finalize.blocked")
                     result = SkillResult(
@@ -124,6 +173,7 @@ class SkillEngine:
                     reason_code=validation.reason_code,
                 )
                 events.append("nova.skill.failed")
+                self._persist_run(context, execution_id, skill, "failed")
                 finalized = await self.client.finalize_execution(execution_id, "failed")
                 return SkillRunOutcome(
                     execution_id=execution_id,
@@ -152,11 +202,10 @@ class SkillEngine:
                 item_id = item.id
 
             if needs_approval:
-                requested_by = context.system_actor_id or context.actor_id
                 approval = await self.client.request_approval(
                     execution_id,
                     skill_id=skill.manifest.id,
-                    requested_by=requested_by,
+                    requested_by=context.actor_id,
                     artifact_hash=result.artifact_hash,
                 )
                 events.append("approval.requested")
@@ -165,6 +214,15 @@ class SkillEngine:
                     stored = self.store.get_item(item_id)
                     if stored:
                         stored.approval_id = approval_id
+                        self.store.save_item(stored)
+                self._persist_run(
+                    context,
+                    execution_id,
+                    skill,
+                    "waiting_approval",
+                    config_hash=plan.metadata.get("config_hash"),
+                    artifact_hash=result.artifact_hash,
+                )
                 return SkillRunOutcome(
                     execution_id=execution_id,
                     verity_record_id=verity_record_id,
@@ -185,6 +243,14 @@ class SkillEngine:
                 **{k: v for k, v in start_meta.items() if k not in {"skill_id", "skill_version"}},
             )
             events.append("nova.skill.completed")
+            self._persist_run(
+                context,
+                execution_id,
+                skill,
+                "completed",
+                config_hash=plan.metadata.get("config_hash"),
+                artifact_hash=result.artifact_hash,
+            )
             finalized = await self.client.finalize_execution(execution_id, "completed")
             events.append("finalize.completed")
             record = await self.client.get_record(execution_id)
@@ -200,17 +266,14 @@ class SkillEngine:
                 events=events,
             )
         except NovaError as err:
-            try:
-                await self.client.skill_fail(
-                    execution_id,
-                    skill_id=skill.manifest.id,
-                    skill_version=skill.manifest.version,
-                    reason_code=err.code,
-                )
-                await self.client.finalize_execution(execution_id, "failed")
-            except NovaError:
-                pass
+            await self._fail_open_execution(execution_id, skill, err.code)
+            self._persist_run(context, execution_id, skill, "failed")
             raise
+        except Exception:
+            logger.exception("unexpected Nova skill failure")
+            await self._fail_open_execution(execution_id, skill, "NOVA_INTERNAL_ERROR")
+            self._persist_run(context, execution_id, skill, "failed")
+            raise NovaError("NOVA_INTERNAL_ERROR", "skill execution failed", 500) from None
 
     async def decide_social(
         self,
@@ -230,14 +293,12 @@ class SkillEngine:
             allow=allow,
             artifact_hash=artifact_hash,
         )
-        item = next(
-            (i for i in self.store.items.values() if i.execution_id == execution_id),
-            None,
-        )
+        item = self.store.get_item_by_execution(execution_id)
         if item and item.artifact_hash != artifact_hash:
             raise NovaError("ARTIFACT_HASH_MISMATCH", "content changed after approval request", 409)
         if item:
             item.status = "approved" if allow else "rejected"
+            self.store.save_item(item)
         if allow:
             await self.client.skill_complete(
                 execution_id,

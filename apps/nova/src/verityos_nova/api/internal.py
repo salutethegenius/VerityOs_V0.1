@@ -15,8 +15,33 @@ def _app(request: Request):
     return request.app.state.nova
 
 
+def require_internal_auth(request: Request) -> None:
+    nova = _app(request)
+    if not nova.internal_token:
+        raise HTTPException(status_code=503, detail="internal token is not configured")
+    header = request.headers.get("authorization") or ""
+    if header != f"Bearer {nova.internal_token}":
+        raise HTTPException(status_code=401, detail="invalid internal token")
+
+
+def require_cron_auth(request: Request, x_cron_secret: str | None) -> None:
+    nova = _app(request)
+    if not nova.cron_secret:
+        raise HTTPException(status_code=503, detail="cron secret is not configured")
+    if x_cron_secret != nova.cron_secret:
+        raise HTTPException(status_code=401, detail="invalid cron secret")
+
+
+def locked_organization_id(nova, body: dict[str, Any]) -> str:
+    requested = body.get("organization_id")
+    if requested and requested != nova.organization_id:
+        raise HTTPException(status_code=403, detail="organization override denied")
+    return nova.organization_id
+
+
 @router.get("/internal/v1/skills")
 def list_skills(request: Request) -> dict[str, Any]:
+    require_internal_auth(request)
     nova = _app(request)
     return {
         "skills": [
@@ -35,14 +60,18 @@ def list_skills(request: Request) -> dict[str, Any]:
 
 @router.post("/internal/v1/skills/{skill_id}/execute")
 async def execute_skill(skill_id: str, request: Request) -> dict[str, Any]:
+    require_internal_auth(request)
     nova = _app(request)
+    if nova.engine is None:
+        raise HTTPException(status_code=503, detail="nova engine is not configured")
     body = await request.json()
     try:
         skill = nova.registry.get(skill_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="skill not found") from exc
+    organization_id = locked_organization_id(nova, body)
     context = NovaContext(
-        organization_id=body.get("organization_id") or nova.organization_id,
+        organization_id=organization_id,
         actor_id=body["actor_id"],
         skill_id=skill_id,
         request=body.get("input") or body,
@@ -59,10 +88,12 @@ async def execute_skill(skill_id: str, request: Request) -> dict[str, Any]:
 
 @router.post("/internal/v1/identities")
 async def map_identity(request: Request) -> dict[str, Any]:
+    require_internal_auth(request)
     nova = _app(request)
     body = await request.json()
+    organization_id = locked_organization_id(nova, body)
     nova.store.map_identity(
-        body["organization_id"],
+        organization_id,
         body.get("provider") or "slack",
         body["external_user_id"],
         body["verity_user_id"],
@@ -72,15 +103,15 @@ async def map_identity(request: Request) -> dict[str, Any]:
 
 @router.post("/generate/start")
 async def generate_start(request: Request, x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")):
+    require_cron_auth(request, x_cron_secret)
     nova = _app(request)
-    if nova.cron_secret and x_cron_secret != nova.cron_secret:
-        raise HTTPException(status_code=401, detail="invalid cron secret")
+    if nova.engine is None:
+        raise HTTPException(status_code=503, detail="nova engine is not configured")
     body = await request.json()
-    from verityos_nova.runtime.context import NovaContext
-
+    organization_id = locked_organization_id(nova, body)
     skill = nova.registry.get("nova.social.draft")
     context = NovaContext(
-        organization_id=body.get("organization_id") or nova.organization_id,
+        organization_id=organization_id,
         actor_id=body.get("actor_id") or nova.system_actor_id,
         skill_id="nova.social.draft",
         request=body.get("input") or body,
@@ -102,14 +133,16 @@ async def generate_start(request: Request, x_cron_secret: str | None = Header(de
             )
             item.slack_message_ts = ts
             item.slack_channel = nova.slack_channel
+            nova.store.save_item(item)
     return outcome.__dict__
 
 
 @router.post("/cron/generate")
 async def cron_generate(request: Request, x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")):
+    require_cron_auth(request, x_cron_secret)
     nova = _app(request)
-    if nova.cron_secret and x_cron_secret != nova.cron_secret:
-        raise HTTPException(status_code=401, detail="invalid cron secret")
+    if nova.engine is None:
+        raise HTTPException(status_code=503, detail="nova engine is not configured")
     from verityos_nova.skills.social.cadence import brands_due
 
     results = []
@@ -137,6 +170,7 @@ async def cron_generate(request: Request, x_cron_secret: str | None = Header(def
                     )
                     item.slack_message_ts = ts
                     item.slack_channel = nova.slack_channel
+                    nova.store.save_item(item)
             results.append(
                 {
                     "brand_id": brand.brand_id,
@@ -150,13 +184,13 @@ async def cron_generate(request: Request, x_cron_secret: str | None = Header(def
 
 @router.post("/onboard/start")
 async def onboard_start(request: Request, x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")):
+    require_cron_auth(request, x_cron_secret)
     nova = _app(request)
-    if nova.cron_secret and x_cron_secret != nova.cron_secret:
-        raise HTTPException(status_code=401, detail="invalid cron secret")
     from verityos_nova.adapters.slack.events import start_onboarding_session
     from verityos_nova.skills.social.onboarding import PHASES
 
     body = await request.json()
+    locked_organization_id(nova, body)
     msg = await nova.slack.post_message(body.get("channel") or nova.slack_channel, "Nova onboarding started")
     session = start_onboarding_session(
         nova.store,
@@ -167,10 +201,13 @@ async def onboard_start(request: Request, x_cron_secret: str | None = Header(def
         thread_ts=msg.ts,
     )
     title, questions = PHASES[0][1], PHASES[0][2]
-    await nova.slack.post_message(session.channel, f"*{title}*\n" + "\n".join(f"- {q}" for q in questions), thread_ts=msg.ts)
+    await nova.slack.post_message(
+        session.channel, f"*{title}*\n" + "\n".join(f"- {q}" for q in questions), thread_ts=msg.ts
+    )
     return {"ok": True, "thread_ts": msg.ts, "session_id": session.id}
 
 
 @router.post("/publish")
-async def publish() -> None:
+async def publish(request: Request) -> None:
+    require_internal_auth(request)
     publish_meta()

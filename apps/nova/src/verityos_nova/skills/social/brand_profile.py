@@ -1,9 +1,9 @@
 """Brand profile accessors. Brands are data, never hardcoded in core."""
 
-from verityos_nova.store import Brand, MemoryStore
+from verityos_nova.store import Brand, Store
 
 
-def load_brand(store: MemoryStore, organization_id: str, brand_id: str) -> Brand:
+def load_brand(store: Store, organization_id: str, brand_id: str) -> Brand:
     brand = store.get_brand(organization_id, brand_id)
     if brand is None:
         raise KeyError("brand unavailable")

@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
+
+from verityos_nova.runtime.errors import NovaError
+
 
 @dataclass
 class SlackMessage:
@@ -52,6 +56,65 @@ class FakeSlackClient(SlackClient):
         )
         self.posted.append(msg)
         return msg
+
+
+class HttpSlackClient(SlackClient):
+    """Slack Web API client. Tests inject an httpx client with MockTransport."""
+
+    def __init__(self, token: str, http: httpx.AsyncClient | None = None) -> None:
+        if not token:
+            raise NovaError("SLACK_NOT_CONFIGURED", "SLACK_BOT_TOKEN is required", 500)
+        self._token = token
+        self._http = http or httpx.AsyncClient(base_url="https://slack.com/api/", timeout=30.0)
+        self._owns_http = http is None
+
+    async def aclose(self) -> None:
+        if self._owns_http:
+            await self._http.aclose()
+
+    async def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self._http.post(
+            method if not method.startswith("/") else method[1:],
+            json=payload,
+            headers={
+                "authorization": f"Bearer {self._token}",
+                "content-type": "application/json; charset=utf-8",
+            },
+        )
+        if response.status_code >= 400:
+            raise NovaError("SLACK_HTTP_ERROR", "slack request failed", 502)
+        body = response.json()
+        if not body.get("ok"):
+            raise NovaError("SLACK_API_ERROR", "slack api rejected the request", 502)
+        return body
+
+    async def post_message(self, channel: str, text: str, **kwargs: Any) -> SlackMessage:
+        payload: dict[str, Any] = {"channel": channel, "text": text}
+        if kwargs.get("thread_ts"):
+            payload["thread_ts"] = kwargs["thread_ts"]
+        if kwargs.get("blocks") is not None:
+            payload["blocks"] = kwargs["blocks"]
+        body = await self._call("chat.postMessage", payload)
+        return SlackMessage(
+            channel=body.get("channel") or channel,
+            text=text,
+            ts=str(body.get("ts") or ""),
+            thread_ts=kwargs.get("thread_ts"),
+            blocks=list(kwargs.get("blocks") or []),
+        )
+
+    async def update_message(self, channel: str, ts: str, text: str, **kwargs: Any) -> SlackMessage:
+        payload: dict[str, Any] = {"channel": channel, "ts": ts, "text": text}
+        if kwargs.get("blocks") is not None:
+            payload["blocks"] = kwargs["blocks"]
+        body = await self._call("chat.update", payload)
+        return SlackMessage(
+            channel=channel,
+            text=text,
+            ts=str(body.get("ts") or ts),
+            blocks=list(kwargs.get("blocks") or []),
+            updated=True,
+        )
 
 
 def unique_action_id(prefix: str, *parts: str) -> str:

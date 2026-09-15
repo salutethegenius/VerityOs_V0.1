@@ -10,12 +10,12 @@ from verityos_nova.skills.social.onboarding import (
     next_phase,
     synthesize_session,
 )
-from verityos_nova.store import MemoryStore, OnboardingSession
+from verityos_nova.store import OnboardingSession, Store
 
 
 async def handle_event(
     *,
-    store: MemoryStore,
+    store: Store,
     slack: SlackClient,
     organization_id: str,
     event: dict[str, Any],
@@ -71,7 +71,7 @@ async def handle_event(
 
 
 def start_onboarding_session(
-    store: MemoryStore,
+    store: Store,
     *,
     organization_id: str,
     brand_id: str,

@@ -10,6 +10,7 @@ from verityos_nova.runtime.errors import (
     BrandUnavailableError,
     ConnectorUnavailableError,
     NovaError,
+    RuntimeConfigError,
     UnmappedActorError,
 )
 from verityos_nova.runtime.registry import SkillRegistry
@@ -19,6 +20,7 @@ __all__ = [
     "ConnectorUnavailableError",
     "NovaContext",
     "NovaError",
+    "RuntimeConfigError",
     "SkillManifest",
     "SkillPlan",
     "SkillRegistry",

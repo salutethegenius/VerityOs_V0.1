@@ -29,3 +29,11 @@ python3 -m pip install pytest pytest-asyncio
 pytest apps/nova apps/knowledge packages/sdk-python
 ruff check apps/nova apps/knowledge packages/sdk-python
 ```
+
+Nova (non-production) ASGI:
+
+```bash
+uvicorn verityos_nova.app.main:create_runtime_app --factory --host 0.0.0.0 --port 8090
+```
+
+`create_runtime_app()` requires `DATABASE_URL`, `CORE_API_URL`, `NOVA_SERVICE_TOKEN`, `NOVA_ORGANIZATION_ID`, `NOVA_SYSTEM_ACTOR_ID`, `NOVA_INTERNAL_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CONTENT_CHANNEL`, and `CRON_SECRET`. Missing values fail startup. Tests inject `MemoryStore`, `FakeSlackClient`, and a fake Core client instead.

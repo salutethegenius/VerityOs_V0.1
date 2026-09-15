@@ -20,7 +20,7 @@ Do not change the live Slack app request URLs in this phase. When cutover is exp
 
 - Image generation is a hashed placeholder, not the Content-Loop SVG/design-system pipeline.
 - Meta publish/schedule returns `CONNECTOR_NOT_AVAILABLE`.
-- Nova persistence in tests uses an in-memory store; Postgres schemas exist for later wiring.
+- Tests inject `MemoryStore`; the real runtime uses `PostgresStore` (`create_runtime_app`).
 - Slack account linking is an admin/test `POST /internal/v1/identities` mapping, not OAuth.
 
 
@@ -82,9 +82,10 @@ VerityOS tables: `nova.external_identities`, `nova.skill_runs`, `social.brands`,
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Unused by Nova. Models go through Core mock/router |
 | `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` / `SLACK_CONTENT_CHANNEL` | Same names; tests use a fake Slack client |
 | `DATABASE_URL` | Shared VerityOS Postgres (`nova` + `social` schemas) |
-| `CRON_SECRET` | Same header on compatibility routes |
+| `CRON_SECRET` | Required; missing secret fails closed (503) rather than skipping auth |
 | `META_*` | Not used; publish fails closed |
 | (new) `CORE_API_URL` / `NOVA_SERVICE_TOKEN` / `NOVA_ORGANIZATION_ID` / `NOVA_SYSTEM_ACTOR_ID` | Org-scoped Nova runtime |
+| (new) `NOVA_INTERNAL_TOKEN` | Bearer credential for `/internal/v1/*` mutating routes |
 
 ## Production migration strategy (later, not this PR)
 
@@ -111,3 +112,13 @@ Rollback: leave Railway Nova on Content-Loop; VerityOS Nova is side-by-side unti
 - `GET /internal/v1/executions/:id/record`
 - Service scope `executions.write`
 - User permission `social.draft`
+
+## Runtime hardening
+
+Non-production ASGI:
+
+```bash
+uvicorn verityos_nova.app.main:create_runtime_app --factory --host 0.0.0.0 --port 8090
+```
+
+`PostgresStore` persists identities, skill runs, brands, content items, and onboarding sessions. Slack uses `chat.postMessage` / `chat.update` with `SLACK_BOT_TOKEN`. Mutating Nova internal routes require `NOVA_INTERNAL_TOKEN`. Compatibility cron routes require `CRON_SECRET`. Request bodies cannot override `NOVA_ORGANIZATION_ID`. Completed executions prefer `nova.skill.completed.output_hash` as the final ledger `response_hash`. Onboarding stores `proposed_config_version` with the hash the operator approved.

@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 
@@ -70,18 +70,76 @@ class OnboardingSession:
     draft_voice_md: str | None = None
     draft_config: dict[str, Any] | None = None
     proposed_config_hash: str | None = None
+    proposed_config_version: int | None = None
     execution_id: str | None = None
     status: str = "in_progress"
     id: str = field(default_factory=lambda: str(uuid4()))
 
 
+@dataclass
+class SkillRun:
+    organization_id: str
+    execution_id: str
+    skill_id: str
+    skill_version: str
+    actor_id: str
+    status: str
+    config_hash: str | None = None
+    artifact_hash: str | None = None
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+
+class Store(Protocol):
+    def map_identity(
+        self, organization_id: str, provider: str, external_user_id: str, verity_user_id: str
+    ) -> None: ...
+
+    def resolve_identity(self, organization_id: str, provider: str, external_user_id: str) -> str | None: ...
+
+    def upsert_brand(self, brand: Brand) -> Brand: ...
+
+    def get_brand(self, organization_id: str, brand_id: str) -> Brand | None: ...
+
+    def list_active_brands(self, organization_id: str) -> list[Brand]: ...
+
+    def save_item(self, item: ContentItem) -> ContentItem: ...
+
+    def get_item(self, item_id: str) -> ContentItem | None: ...
+
+    def get_item_by_execution(self, execution_id: str) -> ContentItem | None: ...
+
+    def list_items(self, organization_id: str, brand_id: str | None = None) -> list[ContentItem]: ...
+
+    def count_drafts(self, organization_id: str, brand_id: str, platform: str) -> int: ...
+
+    def pending_backlog(self, organization_id: str, brand_id: str) -> bool: ...
+
+    def last_activity(self, organization_id: str, brand_id: str) -> datetime | None: ...
+
+    def save_session(self, session: OnboardingSession) -> OnboardingSession: ...
+
+    def get_session(self, organization_id: str, brand_id: str) -> OnboardingSession | None: ...
+
+    def get_session_by_thread(self, organization_id: str, thread_ts: str) -> OnboardingSession | None: ...
+
+    def get_session_by_id(self, session_id: str) -> OnboardingSession | None: ...
+
+    def save_skill_run(self, run: SkillRun) -> SkillRun: ...
+
+    def get_skill_run(self, organization_id: str, execution_id: str) -> SkillRun | None: ...
+
+
 class MemoryStore:
+    """In-memory store for tests only. Real runtime uses PostgresStore."""
+
     def __init__(self) -> None:
         self.identities: dict[tuple[str, str, str], str] = {}
         self.brands: dict[tuple[str, str], Brand] = {}
         self.items: dict[str, ContentItem] = {}
         self.sessions: dict[tuple[str, str], OnboardingSession] = {}
         self.sessions_by_thread: dict[tuple[str, str], OnboardingSession] = {}
+        self.sessions_by_id: dict[str, OnboardingSession] = {}
+        self.skill_runs: dict[tuple[str, str], SkillRun] = {}
 
     def map_identity(self, organization_id: str, provider: str, external_user_id: str, verity_user_id: str) -> None:
         self.identities[(organization_id, provider, external_user_id)] = verity_user_id
@@ -108,6 +166,9 @@ class MemoryStore:
 
     def get_item(self, item_id: str) -> ContentItem | None:
         return self.items.get(item_id)
+
+    def get_item_by_execution(self, execution_id: str) -> ContentItem | None:
+        return next((i for i in self.items.values() if i.execution_id == execution_id), None)
 
     def list_items(self, organization_id: str, brand_id: str | None = None) -> list[ContentItem]:
         rows = [i for i in self.items.values() if i.organization_id == organization_id]
@@ -141,6 +202,7 @@ class MemoryStore:
     def save_session(self, session: OnboardingSession) -> OnboardingSession:
         self.sessions[(session.organization_id, session.brand_id)] = session
         self.sessions_by_thread[(session.organization_id, session.thread_ts)] = session
+        self.sessions_by_id[session.id] = session
         return session
 
     def get_session_by_thread(self, organization_id: str, thread_ts: str) -> OnboardingSession | None:
@@ -148,6 +210,16 @@ class MemoryStore:
 
     def get_session(self, organization_id: str, brand_id: str) -> OnboardingSession | None:
         return self.sessions.get((organization_id, brand_id))
+
+    def get_session_by_id(self, session_id: str) -> OnboardingSession | None:
+        return self.sessions_by_id.get(session_id)
+
+    def save_skill_run(self, run: SkillRun) -> SkillRun:
+        self.skill_runs[(run.organization_id, run.execution_id)] = run
+        return run
+
+    def get_skill_run(self, organization_id: str, execution_id: str) -> SkillRun | None:
+        return self.skill_runs.get((organization_id, execution_id))
 
 
 def is_due_for_post(brand: Brand, last_activity: datetime | None) -> bool:

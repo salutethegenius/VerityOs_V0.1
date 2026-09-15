@@ -30,3 +30,7 @@ class ConnectorUnavailableError(NovaError):
             f"{connector} publishing is not enabled in the VerityOS Nova runtime",
             409,
         )
+
+
+class RuntimeConfigError(RuntimeError):
+    """Raised when the real Nova runtime is missing required environment."""

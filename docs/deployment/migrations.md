@@ -15,4 +15,4 @@ Migrations in this repository are **reversible**. Each file must provide a `down
 
 Do not run `pnpm db:migrate:down` against a database you care about without a backup. Forward-only behavior is not the policy; incomplete `down()` functions are not allowed.
 
-Phase 7 (`1750000000003_execution_graph_v2`) follows the same rule. Phase 8 (`1750000000004_nova_phase8`) adds `nova`/`social` schemas, `social.draft`, and `command.approvals.artifact_hash`. It does not copy Content-Loop production rows.
+Phase 7 (`1750000000003_execution_graph_v2`) follows the same rule. Phase 8 (`1750000000004_nova_phase8`) adds `nova`/`social` schemas, `social.draft`, and `command.approvals.artifact_hash`. It does not copy Content-Loop production rows. Phase 8 hardening (`1750000000005_nova_tenant_integrity`) adds composite organization FKs and `proposed_config_version`.

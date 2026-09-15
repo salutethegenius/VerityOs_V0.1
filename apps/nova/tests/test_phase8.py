@@ -216,6 +216,9 @@ async def test_social_e2e_approve_and_reject(store: MemoryStore) -> None:
     assert "nova.skill.started" in waiting.events
     assert "approval.requested" in waiting.events
     assert any(name == "skill_start" for name, _ in core.calls)
+    requested = [kwargs for name, kwargs in core.calls if name == "request_approval"]
+    assert requested
+    assert all(call["requested_by"] == "user-human" for call in requested)
     item = store.get_item(waiting.item_id)
     assert item is not None
     ts = await post_draft_after_checkpoint(
@@ -343,19 +346,24 @@ async def test_onboarding_governed_synthesis(store: MemoryStore) -> None:
     session.status = "approved"
     store.save_session(session)
     assert brand.config_version >= 1
+    assert brand.config_hash == session.proposed_config_hash
     assert brand.config_hash == canonical_config_hash(
         brand.brand_id, brand.voice_md, brand.config_json, brand.config_version
     )
     assert store.get_brand("org-1", "acme-onboard") is not None
 
+    first_hash = session.proposed_config_hash
     core.model_text = '# Voice\nBe bolder.\n{"display_name":"Acme","content_pillars":[{"pillar":"Community"}]}'
     regenerated = await synthesize_session(engine, session, "user-human", "user-system")
     assert regenerated.execution_id != outcome.execution_id
     assert session.status == "proposed"
+    assert session.proposed_config_version == brand.config_version + 1
+    assert session.proposed_config_hash != first_hash
     apply_proposed_brand(store, session)
     updated = store.get_brand("org-1", "acme-onboard")
     assert updated is not None
     assert updated.config_version == brand.config_version + 1
+    assert updated.config_hash == session.proposed_config_hash
     assert synthesis_prompt("Acme Co", {"identity": ["We sell tools"]})
 
 
@@ -380,14 +388,24 @@ def test_cron_uses_system_actor(store: MemoryStore) -> None:
     opens = [kwargs for name, kwargs in core.calls if name == "open_execution"]
     assert opens
     assert all(call["actor_id"] == "user-system" for call in opens)
+    requested = [kwargs for name, kwargs in core.calls if name == "request_approval"]
+    assert requested
+    assert all(call["requested_by"] == "user-system" for call in requested)
 
 
 def test_health_and_skills_api(store: MemoryStore) -> None:
-    app = create_app(store=store, organization_id="org-1", system_actor_id="user-system")
+    app = create_app(
+        store=store,
+        organization_id="org-1",
+        system_actor_id="user-system",
+        internal_token="internal-secret",
+    )
     client = TestClient(app)
     health = client.get("/health")
     assert health.json()["phase"] == "8"
-    skills = client.get("/internal/v1/skills")
+    denied = client.get("/internal/v1/skills")
+    assert denied.status_code == 401
+    skills = client.get("/internal/v1/skills", headers={"authorization": "Bearer internal-secret"})
     assert len(skills.json()["skills"]) == 3
 
 
@@ -445,9 +463,17 @@ def test_unique_action_ids() -> None:
 def test_external_identity_mapping(store: MemoryStore) -> None:
     assert store.resolve_identity("org-1", "slack", "U123") == "user-human"
     assert store.resolve_identity("org-1", "slack", "U-unknown") is None
-    client = TestClient(create_app(store=store, organization_id="org-1", system_actor_id="user-system"))
+    client = TestClient(
+        create_app(
+            store=store,
+            organization_id="org-1",
+            system_actor_id="user-system",
+            internal_token="internal-secret",
+        )
+    )
     mapped = client.post(
         "/internal/v1/identities",
+        headers={"authorization": "Bearer internal-secret"},
         json={
             "organization_id": "org-1",
             "provider": "slack",
@@ -513,7 +539,8 @@ async def test_slack_generate_then_approve(store: MemoryStore) -> None:
     )
     assert generated["status"] == "waiting_approval"
     assert slack.posted[-1].text
-    item = next(iter(store.items.values()))
+    item = next(iter(store.list_items("org-1")), None)
+    assert item is not None
     approved = await handle_interaction(
         payload={
             "user": {"id": "U123"},

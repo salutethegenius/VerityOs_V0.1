@@ -124,7 +124,9 @@ def apply_proposed_brand(store, session):
 
     existing = store.get_brand(session.organization_id, session.brand_id)
     config = session.draft_config or {}
-    version = (existing.config_version + 1) if existing else 1
+    version = session.proposed_config_version
+    if version is None:
+        version = (existing.config_version + 1) if existing else 1
     brand = Brand(
         organization_id=session.organization_id,
         brand_id=session.brand_id,
@@ -140,7 +142,12 @@ def apply_proposed_brand(store, session):
         config_hash="",
         id=existing.id if existing else str(uuid4()),
     )
-    return store.upsert_brand(brand)
+    brand = store.upsert_brand(brand)
+    if session.proposed_config_hash and brand.config_hash != session.proposed_config_hash:
+        from verityos_nova.runtime.errors import NovaError
+
+        raise NovaError("CONFIG_HASH_MISMATCH", "activated brand hash does not match the approved proposal", 409)
+    return brand
 
 
 async def synthesize_session(engine, session, actor_id: str, system_actor_id: str | None = None):
@@ -160,9 +167,12 @@ async def synthesize_session(engine, session, actor_id: str, system_actor_id: st
         ),
     )
     voice, config = parse_synthesis(outcome.artifact or "", session.display_name)
+    existing = engine.store.get_brand(session.organization_id, session.brand_id)
+    version = (existing.config_version + 1) if existing else 1
     session.draft_voice_md = voice
     session.draft_config = config
-    session.proposed_config_hash = canonical_config_hash(session.brand_id, voice, config, 1)
+    session.proposed_config_version = version
+    session.proposed_config_hash = canonical_config_hash(session.brand_id, voice, config, version)
     session.execution_id = outcome.execution_id
     session.phase = "awaiting_approval"
     session.status = "proposed"

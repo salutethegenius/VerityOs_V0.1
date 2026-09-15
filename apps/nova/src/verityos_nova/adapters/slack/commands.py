@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from verityos_nova.adapters.slack.client import SlackClient, unique_action_id
-from verityos_nova.store import MemoryStore
+from verityos_nova.store import Store
 
 
 async def handle_command(
     *,
     text: str,
     user_id: str,
-    store: MemoryStore,
+    store: Store,
     slack: SlackClient,
     organization_id: str,
     channel: str,

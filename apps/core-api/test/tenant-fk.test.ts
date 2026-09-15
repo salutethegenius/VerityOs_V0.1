@@ -201,4 +201,84 @@ describe("composite tenant foreign keys", () => {
       [randomUUID(), runA, a.organizationId, chunkA, sourceB, versionA, collectionA]
     );
   });
+
+  it("rejects cross-organization Nova identity, skill run, and social content links", async () => {
+    const { a, b } = await twoOrgs();
+    const executionA = randomUUID();
+    const executionB = randomUUID();
+    await pool.query(
+      `INSERT INTO audit.executions (
+         id, verity_record_id, organization_id, actor_id, skill_id, status, risk_tier
+       ) VALUES
+         ($1, $2, $3, $4, 'nova.social.draft', 'running', 'medium'),
+         ($5, $6, $7, $8, 'nova.social.draft', 'running', 'medium')`,
+      [
+        executionA,
+        `VTY-2026-${randomUUID().slice(0, 8)}`,
+        a.organizationId,
+        a.adminUserId,
+        executionB,
+        `VTY-2026-${randomUUID().slice(0, 8)}`,
+        b.organizationId,
+        b.adminUserId,
+      ]
+    );
+
+    await expectFk(
+      `INSERT INTO nova.external_identities (
+         id, organization_id, provider, external_user_id, verity_user_id
+       ) VALUES ($1, $2, 'slack', 'U-cross', $3)`,
+      [randomUUID(), a.organizationId, b.adminUserId]
+    );
+
+    await expectFk(
+      `INSERT INTO nova.skill_runs (
+         id, organization_id, execution_id, skill_id, skill_version, actor_id, status
+       ) VALUES ($1, $2, $3, 'nova.social.draft', '1.0.0', $4, 'started')`,
+      [randomUUID(), a.organizationId, executionB, a.adminUserId]
+    );
+
+    await expectFk(
+      `INSERT INTO nova.skill_runs (
+         id, organization_id, execution_id, skill_id, skill_version, actor_id, status
+       ) VALUES ($1, $2, $3, 'nova.social.draft', '1.0.0', $4, 'started')`,
+      [randomUUID(), a.organizationId, executionA, b.adminUserId]
+    );
+
+    await pool.query(
+      `INSERT INTO social.brands (
+         id, organization_id, brand_id, display_name, active, config_version
+       ) VALUES ($1, $2, 'acme', 'Acme', true, 1), ($3, $4, 'beta', 'Beta', true, 1)`,
+      [randomUUID(), a.organizationId, randomUUID(), b.organizationId]
+    );
+
+    await expectFk(
+      `INSERT INTO social.content_items (
+         id, organization_id, brand_id, platform, draft_text, status, artifact_hash
+       ) VALUES ($1, $2, 'beta', 'facebook', 'draft', 'pending_approval', $3)`,
+      [randomUUID(), a.organizationId, "a".repeat(64)]
+    );
+
+    const approvalB = randomUUID();
+    await pool.query(
+      `INSERT INTO command.approvals (
+         id, organization_id, execution_id, skill_id, requested_by, status, artifact_hash
+       ) VALUES ($1, $2, $3, 'nova.social.draft', $4, 'pending', $5)`,
+      [approvalB, b.organizationId, executionB, b.adminUserId, "b".repeat(64)]
+    );
+    await expectFk(
+      `INSERT INTO social.content_items (
+         id, organization_id, brand_id, platform, draft_text, status, artifact_hash,
+         execution_id, approval_id
+       ) VALUES ($1, $2, 'acme', 'facebook', 'draft', 'pending_approval', $3, $4, $5)`,
+      [randomUUID(), a.organizationId, "c".repeat(64), executionA, approvalB]
+    );
+
+    await expectFk(
+      `INSERT INTO social.content_items (
+         id, organization_id, brand_id, platform, draft_text, status, artifact_hash, execution_id
+       ) VALUES ($1, $2, 'acme', 'facebook', 'draft', 'pending_approval', $3, $4)`,
+      [randomUUID(), a.organizationId, "d".repeat(64), executionB]
+    );
+  });
 });
