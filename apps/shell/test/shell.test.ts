@@ -50,6 +50,40 @@ describe("display helpers", () => {
   });
 });
 
+describe("operator display", () => {
+  it("dedupes citation titles without dropping chunk counts", async () => {
+    const { dedupeCitations } = await import("../lib/operator-display");
+    const visible = dedupeCitations([
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c1" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c2" },
+      { title: "Public Emergency Advisory Guidance", source_version_id: "v1", chunk_id: "c3" },
+      { title: "Shelter Guide", source_version_id: "v2", chunk_id: "c4" },
+    ]);
+    expect(visible).toHaveLength(2);
+    expect(visible[0]).toMatchObject({ title: "Public Emergency Advisory Guidance", chunkCount: 3 });
+    expect(visible[1]).toMatchObject({ title: "Shelter Guide", chunkCount: 1 });
+  });
+
+  it("labels mock adapter output without rewriting the recorded artifact", async () => {
+    const { presentMockArtifact } = await import("../lib/operator-display");
+    const recorded = "mock:mock-local:SYSTEM: You are VerityOS";
+    expect(presentMockArtifact(recorded)).toEqual({ mock: true, recorded });
+    expect(presentMockArtifact("Paris is the capital of France.")).toEqual({
+      mock: false,
+      recorded: "Paris is the capital of France.",
+    });
+  });
+});
+
+describe("login redirect source", () => {
+  it("navigates authenticated users from /login inside useEffect", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/useEffect\(\(\) => \{[\s\S]*router\.replace\("\/"\)/);
+    expect(source).not.toMatch(/if \(me\) \{\s*router\.replace\("\/"\);\s*\}/);
+  });
+});
+
 describe("browser-safe configuration", () => {
   it("does not place secrets in NEXT_PUBLIC_ variables", async () => {
     const { readFileSync } = await import("node:fs");

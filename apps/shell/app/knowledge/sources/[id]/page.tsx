@@ -10,6 +10,7 @@ import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { CoreApiError } from "@/lib/api/client";
 import { useState } from "react";
+import { KnowledgeLegend } from "@/components/KnowledgeLegend";
 
 export default function SourcePage() {
   const params = useParams<{ id: string }>();
@@ -27,7 +28,8 @@ export default function SourcePage() {
   const source = detail.data?.source;
   return (
     <div>
-      <PageHeader title={source?.title ?? "Source"} description="Version history. Only approved versions carry an Approved indicator." />
+      <PageHeader title={source?.title ?? "Source"} description="Version history. Only approved versions are trusted institutional evidence." />
+      <KnowledgeLegend />
       {detail.loading ? <LoadingState /> : null}
       {detail.error ? (
         <ErrorState message={detail.error.message} requestId={detail.error.requestId} onRetry={() => void detail.reload()} />

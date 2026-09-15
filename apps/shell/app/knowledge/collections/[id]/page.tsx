@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from "@/
 import { useAsync } from "@/lib/useAsync";
 import { CoreApiError } from "@/lib/api/client";
 import { formatTime } from "@/lib/format";
+import { KnowledgeLegend } from "@/components/KnowledgeLegend";
 
 export default function CollectionPage() {
   const params = useParams<{ id: string }>();
@@ -33,8 +34,9 @@ export default function CollectionPage() {
     <div>
       <PageHeader
         title={collection?.name ?? "Collection"}
-        description="Sources in this collection. Approved versions are the only trusted institutional evidence."
+        description="Sources in this collection. Only approved versions are trusted institutional evidence."
       />
+      <KnowledgeLegend />
       {detail.loading ? <LoadingState /> : null}
       {detail.error ? (
         <ErrorState message={detail.error.message} requestId={detail.error.requestId} onRetry={() => void detail.reload()} />

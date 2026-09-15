@@ -27,7 +27,8 @@ pnpm seed:dev
 # prints:
 #   admin@verity.local / verity-dev-admin
 #   member@verity.local / verity-dev-member
-#   Nova tokens (tmp/verity-dev-seed.json)
+#   seed file is always at repo-root tmp/verity-dev-seed.json
+#   (absolute path is printed; Nova tokens are in the file, not stdout)
 
 # Terminal 1 — Core
 NOVA_INTERNAL_URL=http://127.0.0.1:8090 \
@@ -54,6 +55,15 @@ CORE_API_URL=http://127.0.0.1:8080 pnpm --filter @verityos/shell dev
 ```
 
 Open http://127.0.0.1:3000/login and sign in as `admin@verity.local` / `verity-dev-admin`. Social drafts require a second actor for approval (`member@verity.local` / `verity-dev-member`); self-approval is denied.
+
+Development logins:
+
+| Persona | Email | Password | Typical work |
+| --- | --- | --- | --- |
+| Admin | `admin@verity.local` | `verity-dev-admin` | Approve, publish, verify |
+| Member | `member@verity.local` | `verity-dev-member` | Draft (cannot self-approve) |
+
+Nova tokens live in **repository-root** `tmp/verity-dev-seed.json` even if you ran `pnpm seed:dev` from another directory. The command prints the absolute path. Do not commit that file.
 
 Government communications demo (synthetic org, not a ministry):
 

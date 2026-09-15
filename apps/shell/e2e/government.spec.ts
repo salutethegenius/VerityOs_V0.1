@@ -44,7 +44,8 @@ test("government communications draft approve publish verify", async ({ page }) 
 
   await page.getByRole("link", { name: "Nova" }).click();
   await page.getByRole("tab", { name: "Social Draft" }).click();
-  await page.getByRole("button", { name: /nova.social.draft/ }).first().click();
+  await page.getByRole("button", { name: /Social Draft|nova.social.draft/ }).first().click();
+  await expect(page.getByTestId("nova-citations")).toBeVisible();
   await expect(page.getByRole("button", { name: "Publish Now" })).toBeVisible();
   const published = page.waitForResponse(
     (response) => response.url().includes("/connectors/actions") && response.request().method() === "POST"
@@ -69,7 +70,7 @@ test("strict unsupported question shows insufficient approved evidence", async (
   await page.getByLabel("Question").fill(
     "What is the classified satellite frequency for Operation Meridian in this office?"
   );
-  await page.getByLabel("Knowledge mode").selectOption("strict");
+  await page.getByLabel("Knowledge mode").selectOption({ value: "strict" });
   await page.getByRole("checkbox", { name: "Institutional Guidance (Synthetic Demo)" }).check();
   await page.getByRole("button", { name: "Run research" }).click();
   await expect(page.getByTestId("insufficient-evidence")).toBeVisible({ timeout: 60_000 });

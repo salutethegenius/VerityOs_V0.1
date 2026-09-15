@@ -44,9 +44,9 @@ export default function SystemPage() {
             <h2 className="text-sm font-semibold">Storage / embeddings</h2>
             <ul className="mt-2 space-y-1 text-sm">
               <li>storage {data.storage.configured ? data.storage.provider : "not configured"}</li>
-              <li>embeddings {data.embeddings.provider} · dim {data.embeddings.dimensions}</li>
-              <li>models {data.models.count}</li>
-              <li>profile {data.deployment_profile}</li>
+              <li>embeddings {data.embeddings.provider} · {data.embeddings.dimensions} dimensions</li>
+              <li>registered models {data.models.count}</li>
+              <li>deployment profile {data.deployment_profile}</li>
             </ul>
           </Panel>
           <Panel className="md:col-span-2">

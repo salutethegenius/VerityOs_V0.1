@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { createCollection, listCollections } from "@/lib/api/knowledge";
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusPill } from "@/components/ui";
+import { KnowledgeLegend } from "@/components/KnowledgeLegend";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -27,7 +28,8 @@ export default function KnowledgePage() {
   }
   return (
     <div>
-      <PageHeader title="Knowledge" description="Collections and sources. Approval is separate from upload and indexing." />
+      <PageHeader title="Knowledge" description="Collections and sources. Upload, index, and approve remain separate operator actions." />
+      <KnowledgeLegend />
       {can(me?.permissions, "knowledge.manage") ? (
         <form className="mb-6 flex flex-wrap items-end gap-3" onSubmit={(e) => void onCreate(e)}>
           <label className="field">

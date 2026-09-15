@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
@@ -14,6 +14,7 @@ import {
 } from "@verityos/knowledge";
 import { assertDemoResetAllowed, DEMO_ORG_NAME, resolveProfile } from "./runtime-config.js";
 import { wipeOrganization } from "./demo-wipe.js";
+import { writeRepoSeedFile } from "./seed-paths.js";
 
 const PACK_DIR = join(dirname(fileURLToPath(import.meta.url)), "../demo-pack");
 
@@ -259,18 +260,20 @@ async function main() {
       nova_internal_token: internalToken,
       synthetic: true,
     };
-    mkdirSync("tmp", { recursive: true });
-    writeFileSync("tmp/verity-demo-seed.json", JSON.stringify(payload, null, 2));
+    const seedFile = writeRepoSeedFile("verity-demo-seed.json", payload);
     process.stdout.write(
       [
         "Seeded synthetic government communications demo.",
         `  org: ${DEMO_ORG_NAME}`,
-        `  director: ${directorEmail} / ${directorPassword}`,
-        `  officer: ${officerEmail} / ${officerPassword}`,
-        `  analyst: ${analystEmail} / ${analystPassword}`,
         "  documents: SYNTHETIC DEMO DOCUMENT / NOT OFFICIAL GOVERNMENT POLICY",
-        "  nova tokens: tmp/verity-demo-seed.json (not printed)",
-        "Printed once. Rotate before any non-demo use.",
+        "  personas (printed once; rotate before any non-demo use):",
+        `    Communications Officer drafts  ${officerEmail} / ${officerPassword}`,
+        `    Director approves / publishes  ${directorEmail} / ${directorPassword}`,
+        `    Analyst researches only        ${analystEmail} / ${analystPassword}`,
+        "  Analyst cannot social-draft or publish. Self-approval is denied.",
+        `  seed file: ${seedFile.relative}`,
+        `  seed file (absolute): ${seedFile.absolute}`,
+        "  Nova service/internal tokens are in the seed file — not printed.",
         "",
       ].join("\n")
     );

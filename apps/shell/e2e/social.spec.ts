@@ -37,7 +37,7 @@ test("social draft approve publish and verify", async ({ page }) => {
 
   await page.getByRole("link", { name: "Nova" }).click();
   await page.getByRole("tab", { name: "Social Draft" }).click();
-  await page.getByRole("button", { name: /nova.social.draft/ }).first().click();
+  await page.getByRole("button", { name: /Social Draft|nova.social.draft/ }).first().click();
   await expect(page.getByRole("button", { name: "Publish Now" })).toBeVisible();
   const published = page.waitForResponse(
     (response) => response.url().includes("/connectors/actions") && response.request().method() === "POST"

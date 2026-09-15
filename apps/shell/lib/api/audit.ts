@@ -10,6 +10,8 @@ export function getRecord(id: string) {
     verity_record_id: string;
     execution_id: string;
     actor: string;
+    actor_name?: string | null;
+    actor_email?: string | null;
     skill: string | null;
     risk: string | null;
     status: string;

@@ -55,6 +55,7 @@ export type Citation = {
   source_version_id?: string;
   title?: string;
   page?: string | number;
+  chunk_count?: number;
 };
 
 export type NovaExecuteResult = {
@@ -104,10 +105,15 @@ export type NovaRunDetail = {
     status: string;
     artifact_hash: string | null;
     requested_by: string;
+    requested_by_name?: string | null;
+    requested_by_email?: string | null;
     decided_by: string | null;
+    decided_by_name?: string | null;
+    decided_by_email?: string | null;
     created_at: string;
     decided_at: string | null;
   } | null;
+  citations?: Citation[];
 };
 
 export type Collection = {
@@ -153,7 +159,11 @@ export type ApprovalRow = {
   execution_id: string;
   skill_id: string;
   requested_by: string;
+  requested_by_name?: string | null;
+  requested_by_email?: string | null;
   decided_by: string | null;
+  decided_by_name?: string | null;
+  decided_by_email?: string | null;
   status: string;
   reason_code: string | null;
   artifact_hash: string | null;
@@ -168,6 +178,8 @@ export type VerityRecordListItem = {
   verity_record_id: string | null;
   execution_id: string;
   actor_id: string;
+  actor_name?: string | null;
+  actor_email?: string | null;
   skill_id: string | null;
   risk_tier: string | null;
   status: string;

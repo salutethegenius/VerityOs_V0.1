@@ -26,7 +26,7 @@ export default function ConnectorsPage() {
               <th>Type</th>
               <th>Enabled</th>
               <th>Capabilities</th>
-              <th>Secret ref</th>
+              <th>Credential reference</th>
               <th>Health</th>
             </tr>
           </thead>

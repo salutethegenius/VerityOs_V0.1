@@ -8,7 +8,7 @@ export default function RolesPage() {
   const list = useAsync(() => listRoles(), []);
   return (
     <div>
-      <PageHeader title="Roles" description="Role names and permissions as stored in Core." />
+      <PageHeader title="Roles" description="Role names and permissions as stored in Core. This view is read-only in V0.1." />
       {list.loading ? <LoadingState /> : null}
       {list.error ? <ErrorState message={list.error.message} requestId={list.error.requestId} onRetry={() => void list.reload()} /> : null}
       {list.data?.roles.length === 0 ? (
