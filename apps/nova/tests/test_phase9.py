@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from verityos_nova.adapters.slack.client import publish_action_blocks, unique_action_id
+from fakes import FakeCoreClient
+from verityos_nova.adapters.slack.client import (
+    FakeSlackClient,
+    publish_action_blocks,
+    unique_action_id,
+)
 from verityos_nova.adapters.slack.interactions import handle_interaction
 from verityos_nova.runtime.context import NovaContext
 from verityos_nova.runtime.engine import SkillEngine
@@ -12,8 +16,6 @@ from verityos_nova.runtime.errors import ConnectorUnavailableError, NovaError
 from verityos_nova.runtime.registry import SkillRegistry
 from verityos_nova.skills.social.skill import SocialDraftSkill
 from verityos_nova.store import Brand, MemoryStore, sha256_text
-
-from fakes import FakeCoreClient, FakeSlackClient
 
 NOVA_ROOT = Path(__file__).resolve().parents[1] / "src" / "verityos_nova"
 REPO_ROOT = Path(__file__).resolve().parents[3]

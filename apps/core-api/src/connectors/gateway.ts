@@ -294,6 +294,10 @@ export async function requestConnectorAction(
     }
   }
 
+  if (!execution.skill_id) {
+    throw new ExecutionError("CONNECTOR_NOT_ALLOWED_FOR_SKILL", "execution has no skill", 403);
+  }
+
   const approval = await getPendingApprovalForExecution(pool, execution.organization_id, execution.id);
   const policy = await evaluateConnectorAction(pool, {
     organizationId: execution.organization_id,

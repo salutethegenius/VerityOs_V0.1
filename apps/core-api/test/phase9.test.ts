@@ -184,6 +184,30 @@ async function approveDraft(
   });
 }
 
+async function seedBrand(organizationId: string, brandId = "acme") {
+  await pool.query(
+    `INSERT INTO social.brands (id, organization_id, brand_id, display_name, active, config_version)
+     VALUES ($1,$2,$3,$3, true, 1)
+     ON CONFLICT (organization_id, brand_id) DO NOTHING`,
+    [randomUUID(), organizationId, brandId]
+  );
+}
+
+async function seedItem(
+  organizationId: string,
+  executionId: string,
+  message: string,
+  artifactHash: string
+) {
+  await seedBrand(organizationId);
+  await pool.query(
+    `INSERT INTO social.content_items (
+       id, organization_id, brand_id, platform, draft_text, status, artifact_hash, execution_id
+     ) VALUES ($1,$2,'acme','facebook',$3,'approved',$4,$5)`,
+    [randomUUID(), organizationId, message, artifactHash, executionId]
+  );
+}
+
 describe("Phase 9 Connector Gateway", () => {
   it("runs the governed publish e2e exit gate", async () => {
     mode = "ok";
@@ -194,17 +218,7 @@ describe("Phase 9 Connector Gateway", () => {
     const message = "Exact approved Facebook draft";
     const draft = await socialDraft(app, org, auth, message);
     await approveDraft(auth, org, draft);
-    await pool.query(
-      `INSERT INTO social.brands (id, organization_id, brand_id, display_name, active, config_version)
-       VALUES ($1,$2,'acme','Acme', true, 1)`,
-      [randomUUID(), org.organization_id]
-    );
-    await pool.query(
-      `INSERT INTO social.content_items (
-         id, organization_id, brand_id, platform, draft_text, status, artifact_hash, execution_id
-       ) VALUES ($1,$2,'acme','facebook',$3,'approved',$4,$5)`,
-      [randomUUID(), org.organization_id, message, draft.artifactHash, draft.executionId]
-    );
+    await seedItem(org.organization_id, draft.executionId, message, draft.artifactHash);
 
     const published = await app.inject({
       method: "POST",
@@ -525,12 +539,7 @@ describe("Phase 9 Connector Gateway", () => {
     const message = "Scheduled draft";
     const draft = await socialDraft(app, org, auth, message);
     await approveDraft(auth, org, draft);
-    await pool.query(
-      `INSERT INTO social.content_items (
-         id, organization_id, brand_id, platform, draft_text, status, artifact_hash, execution_id
-       ) VALUES ($1,$2,'acme','facebook',$3,'approved',$4,$5)`,
-      [randomUUID(), org.organization_id, message, draft.artifactHash, draft.executionId]
-    );
+    await seedItem(org.organization_id, draft.executionId, message, draft.artifactHash);
     mode = "ok";
     const scheduledFor = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     const scheduled = await app.inject({
@@ -592,12 +601,7 @@ describe("Phase 9 Connector Gateway", () => {
 
     const timeoutDraft = await socialDraft(app, org, auth, "Timeout draft");
     await approveDraft(auth, org, timeoutDraft);
-    await pool.query(
-      `INSERT INTO social.content_items (
-         id, organization_id, brand_id, platform, draft_text, status, artifact_hash, execution_id
-       ) VALUES ($1,$2,'acme','facebook',$3,'approved',$4,$5)`,
-      [randomUUID(), org.organization_id, "Timeout draft", timeoutDraft.artifactHash, timeoutDraft.executionId]
-    );
+    await seedItem(org.organization_id, timeoutDraft.executionId, "Timeout draft", timeoutDraft.artifactHash);
     const timeoutCalls = calls.filter((row) => row.method === "POST").length;
     mode = "timeout";
     const timed = await app.inject({

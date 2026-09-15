@@ -51,7 +51,8 @@ describe("connector registry and Meta adapter", () => {
     expect(published.external_action_id).toBe("123_456");
     expect(published.status).toBe("ok");
     expect(JSON.stringify(published)).not.toContain("super-secret-token");
-    expect(seen.some((row) => row.body.includes("hello world"))).toBe(true);
+    const publishedBody = new URLSearchParams(seen.find((row) => row.body.includes("message="))?.body ?? "");
+    expect(publishedBody.get("message")).toBe("hello world");
 
     const scheduledFor = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     const scheduled = await connector.execute({
