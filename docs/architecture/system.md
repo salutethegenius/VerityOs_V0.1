@@ -22,7 +22,7 @@ VerityOS is a governed, grounded, auditable AI operating environment. Nova, Know
           local | private | cloud
 ```
 
-Phase 3–6 implements identity, Command policy, Model Router V2, and native Verity Knowledge on top of the frozen Audit Kernel. The Kernel is a dependency and trust boundary; Hash Format V2 is not modified.
+Phase 3–8 implements identity, Command policy, Model Router V2, native Verity Knowledge, Execution Graph V2, and the Nova operator runtime on top of the frozen Audit Kernel. The Kernel is a dependency and trust boundary; Hash Format V2 is not modified.
 
 ## Non-negotiable rules
 
@@ -35,8 +35,8 @@ Phase 3–6 implements identity, Command policy, Model Router V2, and native Ver
 
 ## Current phase boundary
 
-**In scope through Phase 7:** identity and organization isolation, Command policy evaluation, Model Router V2 (mock + HTTP adapters), native Verity Knowledge (hybrid retrieval, versioned sources), unified execution lifecycle, Execution Graph V2, Verity Record APIs, and offline graph+ledger verification.
+**In scope through Phase 8:** Nova skill contract (`nova.social.draft`, `nova.research`, `nova.drafting`), organization-scoped Core client, Slack adapter, Command-bound artifact approval, and `waiting_approval` resume. Hash Format V2 and Execution Graph V2 hashing are unchanged.
 
-**Out of scope until a later prompt:** Nova runtime migration, connectors, Verity Shell UI, signing/external anchoring, OIDC/SAML.
+**Out of scope until a later prompt:** Verity Shell UI, live Meta/Facebook connectors, production Content-Loop cutover, signing/external anchoring, OIDC/SAML.
 
 See [execution-graph-v2.md](execution-graph-v2.md).

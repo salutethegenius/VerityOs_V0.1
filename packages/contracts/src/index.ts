@@ -35,6 +35,7 @@ export const PERMISSIONS = [
   "users.manage",
   "roles.manage",
   "nova.use",
+  "social.draft",
   "knowledge.read",
   "knowledge.manage",
   "knowledge.approve",

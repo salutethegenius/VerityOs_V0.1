@@ -481,6 +481,9 @@ export async function finalizeGovernedExecution(
   if (["completed", "failed", "blocked", "cancelled"].includes(execution.status)) {
     throw new ExecutionError("INVALID_EXECUTION_TRANSITION", "execution already terminal", 409);
   }
+  if (execution.status === "waiting_approval" && input.outcome === "completed") {
+    throw new ExecutionError("APPROVAL_PENDING", "execution is waiting for approval", 409);
+  }
   const parent = await lastEventId(pool, execution.organization_id, execution.id);
   const parentEventIds = parent ? [parent] : [];
   const prelude: Array<Omit<AppendExecutionEventInput, "organizationId" | "executionId">> = [
@@ -536,8 +539,13 @@ export async function finalizeGovernedExecution(
   if (input.response !== undefined) {
     responseHash = sha256Hex(JSON.stringify(input.response));
   } else if (input.outcome === "completed") {
-    const completed = [...events].reverse().find((event) => event.event_type === "model.execution.completed");
-    responseHash = completed?.output_hash ?? null;
+    const skillArtifact = [...events]
+      .reverse()
+      .find((event) => event.event_type === "nova.skill.completed" && event.output_hash);
+    const modelCompleted = [...events]
+      .reverse()
+      .find((event) => event.event_type === "model.execution.completed");
+    responseHash = skillArtifact?.output_hash ?? modelCompleted?.output_hash ?? null;
   }
   const sealed = await sealExecution(
     pool,

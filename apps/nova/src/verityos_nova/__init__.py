@@ -1,3 +1,3 @@
-"""Nova runtime is not migrated in Phase 0-2. Production remains Content Loop."""
+"""Nova — VerityOS AI operator. Production Content-Loop remains untouched."""
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.8.0"

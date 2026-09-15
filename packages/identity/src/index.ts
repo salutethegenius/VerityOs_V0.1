@@ -7,6 +7,8 @@ export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 export const SESSION_COOKIE = "verity_session";
 /** Service-credential scope. Organization-less credentials are platform/root. */
 export const PLATFORM_CROSS_ORG_SCOPE = "platform.cross_org";
+/** Service-credential scope for emitting skill/approval operations on an execution. */
+export const EXECUTIONS_WRITE_SCOPE = "executions.write";
 
 export interface AuthContext {
   userId: string;
@@ -55,6 +57,7 @@ function tokenHash(token: string): string {
 const ADMIN_PERMISSIONS = [...PERMISSIONS];
 const MEMBER_PERMISSIONS: PermissionKey[] = [
   "nova.use",
+  "social.draft",
   "knowledge.read",
   "models.read",
   "policies.read",
@@ -337,6 +340,13 @@ export async function createServiceCredential(
   pool: Pool,
   input: { name: string; organizationId: string | null; scopes: string[] }
 ): Promise<{ id: string; token: string }> {
+  if (input.organizationId && input.scopes.includes(PLATFORM_CROSS_ORG_SCOPE)) {
+    throw new AuthError(
+      "INVALID_SCOPE",
+      "organization-scoped credentials cannot include platform.cross_org",
+      400
+    );
+  }
   const id = randomUUID();
   const token = generateServiceToken();
   await pool.query(

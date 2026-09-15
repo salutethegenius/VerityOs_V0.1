@@ -128,6 +128,27 @@ export async function seedDefaultCommand(
       roles: [input.adminRoleId, input.memberRoleId],
     },
     {
+      skillId: "nova.social.draft",
+      approval: true,
+      classification: "internal",
+      risk: "medium",
+      roles: [input.adminRoleId, input.memberRoleId],
+    },
+    {
+      skillId: "nova.research",
+      approval: false,
+      classification: "internal",
+      risk: "medium",
+      roles: [input.adminRoleId, input.memberRoleId],
+    },
+    {
+      skillId: "nova.drafting",
+      approval: false,
+      classification: "internal",
+      risk: "medium",
+      roles: [input.adminRoleId, input.memberRoleId],
+    },
+    {
       skillId: "models.route",
       approval: false,
       classification: "restricted",
@@ -358,16 +379,70 @@ export async function createApproval(
     executionId: string;
     skillId: string;
     requestedBy: string;
+    artifactHash?: string | null;
   }
 ): Promise<string> {
   const id = randomUUID();
   await pool.query(
     `INSERT INTO command.approvals (
-       id, organization_id, execution_id, skill_id, requested_by, status
-     ) VALUES ($1, $2, $3, $4, $5, 'pending')`,
-    [id, input.organizationId, input.executionId, input.skillId, input.requestedBy]
+       id, organization_id, execution_id, skill_id, requested_by, status, artifact_hash
+     ) VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+    [
+      id,
+      input.organizationId,
+      input.executionId,
+      input.skillId,
+      input.requestedBy,
+      input.artifactHash ?? null,
+    ]
   );
   return id;
+}
+
+export async function getApproval(
+  pool: Pool,
+  organizationId: string,
+  approvalId: string
+) {
+  const result = await pool.query<{
+    id: string;
+    organization_id: string;
+    execution_id: string;
+    skill_id: string;
+    requested_by: string;
+    decided_by: string | null;
+    status: string;
+    reason_code: string | null;
+    artifact_hash: string | null;
+    created_at: Date;
+    decided_at: Date | null;
+  }>(
+    `SELECT * FROM command.approvals WHERE id = $1 AND organization_id = $2`,
+    [approvalId, organizationId]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function getPendingApprovalForExecution(
+  pool: Pool,
+  organizationId: string,
+  executionId: string
+) {
+  const result = await pool.query<{
+    id: string;
+    artifact_hash: string | null;
+    status: string;
+    requested_by: string;
+    skill_id: string;
+  }>(
+    `SELECT id, artifact_hash, status, requested_by, skill_id
+     FROM command.approvals
+     WHERE organization_id = $1 AND execution_id = $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [organizationId, executionId]
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function decideApproval(
