@@ -385,6 +385,7 @@ export async function listConnectorsSafe(pool: Pool, organizationId: string) {
 }
 
 export async function listApprovals(pool: Pool, organizationId: string, status?: string) {
+  const dbStatus = status === "rejected" ? "denied" : status;
   const result = await pool.query(
     `SELECT a.id, a.execution_id, a.skill_id, a.requested_by, a.decided_by, a.status,
             a.reason_code, a.artifact_hash, a.created_at, a.decided_at,
@@ -395,7 +396,7 @@ export async function listApprovals(pool: Pool, organizationId: string, status?:
      WHERE a.organization_id = $1
        AND ($2::text IS NULL OR a.status = $2)
      ORDER BY a.created_at DESC`,
-    [organizationId, status ?? null]
+    [organizationId, dbStatus ?? null]
   );
   return result.rows;
 }

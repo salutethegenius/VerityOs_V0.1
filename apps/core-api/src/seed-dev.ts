@@ -114,7 +114,7 @@ async function main() {
     if (process.env.SEED_EXPIRE_PENDING === "1") {
       await pool.query(
         `UPDATE command.approvals
-         SET status = 'expired'
+         SET status = 'denied', reason_code = 'E2E_RESET'
          WHERE organization_id = $1 AND status = 'pending'`,
         [organizationId]
       );

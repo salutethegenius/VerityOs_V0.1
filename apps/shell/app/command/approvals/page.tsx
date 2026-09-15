@@ -67,7 +67,7 @@ export default function ApprovalsPage() {
                 <td>{row.risk_tier ?? "—"}</td>
                 <td>{formatTime(row.created_at)}</td>
                 <td>
-                  <StatusPill label={row.status} />
+                  <StatusPill label={row.status === "denied" ? "Rejected" : row.status} />
                 </td>
                 <td>
                   {row.verity_record_id ? (
