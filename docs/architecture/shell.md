@@ -37,3 +37,5 @@ When Nova is unreachable, `GET /v1/nova/skills` returns the implemented skill ca
 ## Shell
 
 Next.js 15 App Router, React 19, TypeScript strict, Tailwind CSS variables. Optional `NEXT_PUBLIC_CORE_API_URL` is unused by default (relative `/v1` via the proxy). No `NEXT_PUBLIC_*` secrets.
+
+Dev login after `pnpm seed:dev`: `admin@verity.local` / `verity-dev-admin`. Member (for social approval): `member@verity.local` / `verity-dev-member`. Approval status in the database is `pending` | `approved` | `denied` (the Shell rejected filter reads `denied`). There is no `expired` row status in V0.1.

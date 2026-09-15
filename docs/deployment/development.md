@@ -24,7 +24,10 @@ pnpm install
 pnpm db:migrate
 pnpm build
 pnpm seed:dev
-# prints admin@verity.local / verity-dev-admin and Nova tokens (tmp/verity-dev-seed.json)
+# prints:
+#   admin@verity.local / verity-dev-admin
+#   member@verity.local / verity-dev-member
+#   Nova tokens (tmp/verity-dev-seed.json)
 
 # Terminal 1 — Core
 NOVA_INTERNAL_URL=http://127.0.0.1:8090 \
@@ -50,7 +53,7 @@ node scripts/meta-mock.mjs
 CORE_API_URL=http://127.0.0.1:8080 pnpm --filter @verityos/shell dev
 ```
 
-Open http://127.0.0.1:3000/login and sign in as `admin@verity.local` / `verity-dev-admin`.
+Open http://127.0.0.1:3000/login and sign in as `admin@verity.local` / `verity-dev-admin`. Social drafts require a second actor for approval (`member@verity.local` / `verity-dev-member`); self-approval is denied.
 
 Mock embeddings: keep `VERITY_EMBEDDING_PROVIDER=mock`. Mock model adapter is the seeded `mock-local` row. Nova is locked to a single `NOVA_ORGANIZATION_ID` per process.
 
