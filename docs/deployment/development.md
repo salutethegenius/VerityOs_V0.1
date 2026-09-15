@@ -11,7 +11,7 @@ pnpm build
 
 If Docker is unavailable, point `DATABASE_URL` at a local PostgreSQL 16 database named `verityos_audit`.
 
-Phase 3–7 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). A local LLM or local embedding service is optional. Kernel tests still use no model provider. Enable the `vector` extension (Compose `pgvector/pgvector:pg16` already includes it).
+Phase 3–8 Core API tests use the mock model adapter and `MockEmbeddingProvider` (`VERITY_EMBEDDING_PROVIDER=mock`). Nova talks to Core; it does not call Anthropic or OpenAI.
 
 ## CSRF / Origin (V0.1)
 
@@ -25,6 +25,7 @@ Python stubs:
 
 ```bash
 python3 -m pip install -e apps/nova -e apps/knowledge -e packages/sdk-python
-pytest apps/nova apps/knowledge
+python3 -m pip install pytest pytest-asyncio
+pytest apps/nova apps/knowledge packages/sdk-python
 ruff check apps/nova apps/knowledge packages/sdk-python
 ```

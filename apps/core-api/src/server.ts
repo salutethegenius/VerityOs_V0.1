@@ -28,6 +28,7 @@ import {
   resolveServiceToken,
   resolveSession,
   selectOrganization,
+  EXECUTIONS_WRITE_SCOPE,
   PLATFORM_CROSS_ORG_SCOPE,
   type AuthContext,
   type ServiceContext,
@@ -62,6 +63,11 @@ import {
   openGovernedExecution,
   retrieveForExecution,
 } from "./execution/service.js";
+import {
+  decideExecutionApproval,
+  recordSkillLifecycleEvent,
+  requestExecutionApproval,
+} from "./execution/lifecycle.js";
 import { getVerityGraph, getVerityRecord, listVerityRecords } from "./execution/records.js";
 
 declare module "fastify" {
@@ -169,7 +175,7 @@ export async function buildServer(options: { pool?: Pool } = {}) {
   app.get("/v1/health", async () => ({
     status: "ok",
     component: "core-api",
-    phase: "7",
+    phase: "8",
   }));
 
   app.post("/v1/auth/login", async (request, reply) => {
@@ -275,6 +281,13 @@ export async function buildServer(options: { pool?: Pool } = {}) {
     }
     if (!body.name || !body.scopes) {
       throw new ApiError(400, "INVALID_INPUT", "name and scopes are required");
+    }
+    if (body.organization_id && body.scopes.includes(PLATFORM_CROSS_ORG_SCOPE)) {
+      throw new ApiError(
+        400,
+        "INVALID_SCOPE",
+        "organization-scoped credentials cannot include platform.cross_org"
+      );
     }
     const created = await createServiceCredential(pool, {
       name: body.name,
@@ -979,6 +992,134 @@ export async function buildServer(options: { pool?: Pool } = {}) {
       injectFailure:
         body.inject_failure === true && process.env.VERITY_ALLOW_FAILURE_INJECTION === "true",
     });
+  });
+
+  function requireExecutionsWrite(service: ServiceContext) {
+    if (!service.scopes.includes(EXECUTIONS_WRITE_SCOPE)) {
+      throw new ApiError(403, "FORBIDDEN", "missing executions.write scope");
+    }
+  }
+
+  app.post("/internal/v1/executions/:executionId/skill/start", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    const body = request.body as {
+      skill_id?: string;
+      skill_version?: string;
+      brand_id?: string;
+      config_hash?: string;
+    };
+    if (!body.skill_id || !body.skill_version) {
+      throw new ApiError(400, "INVALID_INPUT", "skill_id and skill_version are required");
+    }
+    return recordSkillLifecycleEvent(pool, {
+      organizationId: execution.organization_id,
+      executionId: execution.id,
+      phase: "start",
+      skillId: body.skill_id,
+      skillVersion: body.skill_version,
+      brandId: body.brand_id,
+      configHash: body.config_hash,
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/skill/complete", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    const body = request.body as {
+      skill_id?: string;
+      skill_version?: string;
+      brand_id?: string;
+      config_hash?: string;
+      result_artifact_hash?: string;
+    };
+    if (!body.skill_id || !body.skill_version) {
+      throw new ApiError(400, "INVALID_INPUT", "skill_id and skill_version are required");
+    }
+    return recordSkillLifecycleEvent(pool, {
+      organizationId: execution.organization_id,
+      executionId: execution.id,
+      phase: "complete",
+      skillId: body.skill_id,
+      skillVersion: body.skill_version,
+      brandId: body.brand_id,
+      configHash: body.config_hash,
+      resultArtifactHash: body.result_artifact_hash,
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/skill/fail", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    const body = request.body as {
+      skill_id?: string;
+      skill_version?: string;
+      reason_code?: string;
+    };
+    if (!body.skill_id || !body.skill_version) {
+      throw new ApiError(400, "INVALID_INPUT", "skill_id and skill_version are required");
+    }
+    return recordSkillLifecycleEvent(pool, {
+      organizationId: execution.organization_id,
+      executionId: execution.id,
+      phase: "fail",
+      skillId: body.skill_id,
+      skillVersion: body.skill_version,
+      reasonCode: body.reason_code,
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/approval/request", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    const body = request.body as {
+      skill_id?: string;
+      requested_by?: string;
+      artifact_hash?: string;
+    };
+    if (!body.skill_id || !body.requested_by || !body.artifact_hash) {
+      throw new ApiError(400, "INVALID_INPUT", "skill_id, requested_by, and artifact_hash are required");
+    }
+    return requestExecutionApproval(pool, {
+      organizationId: execution.organization_id,
+      executionId: execution.id,
+      skillId: body.skill_id,
+      requestedBy: body.requested_by,
+      artifactHash: body.artifact_hash,
+    });
+  });
+
+  app.post("/internal/v1/executions/:executionId/approval/decide", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    requireExecutionsWrite(service);
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    const body = request.body as {
+      approval_id?: string;
+      actor_id?: string;
+      allow?: boolean;
+      artifact_hash?: string;
+    };
+    if (!body.approval_id || !body.actor_id || !body.artifact_hash || typeof body.allow !== "boolean") {
+      throw new ApiError(400, "INVALID_INPUT", "approval_id, actor_id, allow, and artifact_hash are required");
+    }
+    return decideExecutionApproval(pool, {
+      organizationId: execution.organization_id,
+      executionId: execution.id,
+      approvalId: body.approval_id,
+      actorId: body.actor_id,
+      allow: body.allow,
+      artifactHash: body.artifact_hash,
+    });
+  });
+
+  app.get("/internal/v1/executions/:executionId/record", async (request) => {
+    const service = await resolveServiceToken(pool, bearer(request));
+    const execution = await requireScopedExecution(service, (request.params as { executionId: string }).executionId);
+    return getVerityRecord(pool, execution.organization_id, execution.verity_record_id);
   });
 
   app.get("/v1/audit/records", async (request) => {

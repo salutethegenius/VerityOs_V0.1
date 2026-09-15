@@ -481,6 +481,9 @@ export async function finalizeGovernedExecution(
   if (["completed", "failed", "blocked", "cancelled"].includes(execution.status)) {
     throw new ExecutionError("INVALID_EXECUTION_TRANSITION", "execution already terminal", 409);
   }
+  if (execution.status === "waiting_approval" && input.outcome === "completed") {
+    throw new ExecutionError("APPROVAL_PENDING", "execution is waiting for approval", 409);
+  }
   const parent = await lastEventId(pool, execution.organization_id, execution.id);
   const parentEventIds = parent ? [parent] : [];
   const prelude: Array<Omit<AppendExecutionEventInput, "organizationId" | "executionId">> = [
