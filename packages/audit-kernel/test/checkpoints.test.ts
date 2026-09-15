@@ -52,7 +52,7 @@ describe("V2 checkpoints", () => {
       entryType: "final",
       requestHash: contentHash("artifact-draft"),
       responseHash: contentHash("published"),
-      executionGraphHash: contentHash("graph"),
+      executionGraphHash: null,
     });
     expect(finalized.previous_entry_hash).toBe(approval.entry_hash);
     expect(finalized.organization_sequence).toBe(3);

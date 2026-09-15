@@ -63,7 +63,7 @@ async function seededChain() {
     entryType: "final",
     requestHash: contentHash("req-1"),
     responseHash: contentHash("res-1"),
-    executionGraphHash: contentHash("graph-1"),
+    executionGraphHash: null,
     merkleSnapshotInterval: 4,
   });
   return { organizationId, execution };
@@ -163,7 +163,7 @@ describe("V2 verification (converted V1 expected failures)", () => {
         entryType: i === 3 ? "final" : "request_opened",
         requestHash: contentHash(`req-${i}`),
         responseHash: i === 3 ? contentHash("res") : null,
-        executionGraphHash: i === 3 ? contentHash("graph") : null,
+        executionGraphHash: null,
         merkleSnapshotInterval: 4,
       });
     }
